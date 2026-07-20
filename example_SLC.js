@@ -1,8 +1,22 @@
 //======================================================
 // T. Mayer 7/20/36 example SLC 
 //======================================================
-// Region of interest
-var roi = geometry;
+// // Region of interest
+// var roi = geometry;
+
+// Region of Interest (ROI)
+var roi = ee.Geometry.Polygon([
+  [
+    [-120.51193638520617, 42.384905429332335],
+    [-119.89670201020617, 42.384905429332335],
+    [-119.89670201020617, 42.82157808688595],
+    [-120.51193638520617, 42.82157808688595],
+    [-120.51193638520617, 42.384905429332335]
+  ]
+]);
+
+Map.centerObject(roi, 10);
+Map.addLayer(roi, {color: 'red'}, 'ROI');
 
 // Primary Landsat 7 image (SLC-off)
 var primary = ee.ImageCollection('LANDSAT/LE07/C02/T1_L2')
