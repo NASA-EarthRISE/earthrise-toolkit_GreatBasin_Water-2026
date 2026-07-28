@@ -1,0 +1,27 @@
+# ── Local inputs (see data/README.md) ──────────────────────────────────────
+# The NWI rasters stay out of git — GSL alone is ~114 MB, over GitHub's 100 MB
+# per-file limit. The calibration tables are ~1 KB each and ARE tracked: they
+# are the authoritative record of the thresholds this project ships.
+data/*
+!data/README.md
+!data/threshold_cv_summary.csv
+!data/ndmi_threshold_cv_all.csv
+
+# ── Generated outputs ──────────────────────────────────────────────────────
+outputs/
+water_extent_monthly_*.csv
+water_extent_timeseries_*.png
+stage_area_*.png
+*.tif
+
+# ── Python ─────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# ── OS / editor ────────────────────────────────────────────────────────────
+.DS_Store
+.vscode/
+.idea/

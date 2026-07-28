@@ -49,6 +49,7 @@ Run: python final_threshold_optimization.py
 from __future__ import annotations
 
 import io
+import os
 import datetime
 import concurrent.futures as cf
 from collections import defaultdict
@@ -72,10 +73,51 @@ from matplotlib.patches import Patch
 from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score
 from sklearn.model_selection import GroupKFold
 
-from gee_pipeline import COLLECTIONS, BAND_MAP, SENSOR_WINDOWS
+# ── Landsat mission configuration ───────────────────────────────────────────
+# Previously imported from gee_pipeline.py, which is retired. Inlined verbatim
+# so this script is self-contained; the band mappings match the plugin's
+# Lake_Classifer_FD/ee_backend.py, which is the authoritative copy for the QGIS
+# side. Sentinel-2 is dropped — SENSORS below is Landsat only.
+#
+# Collection 2, Tier 1, Level 2 surface reflectance.
+COLLECTIONS = {
+    "L5": "LANDSAT/LT05/C02/T1_L2",   # 1984-01-01 – 2012-05-05
+    "L7": "LANDSAT/LE07/C02/T1_L2",   # 1999-01-01 – 2022-04-06 (SLC-off 2003+)
+    "L8": "LANDSAT/LC08/C02/T1_L2",   # 2013-04-11 – present
+    "L9": "LANDSAT/LC09/C02/T1_L2",   # 2022-02-10 – present
+}
+
+# Mission-specific band numbers -> the shared names the index math uses. TM/ETM+
+# and OLI number their bands differently; this is what lets one threshold be
+# applied across all four missions.
+BAND_MAP = {
+    "L5": {"blue": "SR_B1", "green": "SR_B2", "red": "SR_B3",
+           "nir":  "SR_B4", "swir1": "SR_B5"},
+    "L7": {"blue": "SR_B1", "green": "SR_B2", "red": "SR_B3",
+           "nir":  "SR_B4", "swir1": "SR_B5"},
+    "L8": {"blue": "SR_B2", "green": "SR_B3", "red": "SR_B4",
+           "nir":  "SR_B5", "swir1": "SR_B6"},
+    "L9": {"blue": "SR_B2", "green": "SR_B3", "red": "SR_B4",
+           "nir":  "SR_B5", "swir1": "SR_B6"},
+}
+
+# Operational window per mission, so a date filter never asks a satellite for
+# imagery it could not have taken. date.max means "still operating".
+SENSOR_WINDOWS = {
+    "L5": (datetime.date(1984,  1,  1), datetime.date(2012,  5,  5)),
+    "L7": (datetime.date(1999,  1,  1), datetime.date(2022,  4,  6)),
+    "L8": (datetime.date(2013,  4, 11), datetime.date.max),
+    "L9": (datetime.date(2022,  2, 10), datetime.date.max),
+}
+
+# Earth Engine Cloud project. Kept out of source control: set EE_PROJECT in the
+# environment rather than hardcoding an ID here, so a project identifier cannot
+# be committed by accident.
+#     export EE_PROJECT=your-ee-project-id
+EE_PROJECT = os.environ.get('EE_PROJECT', 'your-ee-project-id')
 
 ee.Authenticate()
-ee.Initialize(project='great-basin-499014')
+ee.Initialize(project=EE_PROJECT)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -135,10 +177,14 @@ RUN_RESIDUAL_MAPS = True
 RUN_TIMESERIES    = False   # ~511 months; enable once the table looks right
 
 # Which table the figures-only pass (RUN_OPTIMIZATION=False) reads its thresholds
-# from. Defaults to this script's own output; point it at an earlier run's summary
-# to redraw the figures with those thresholds without re-sampling. Any CSV with
-# site / index / reference / threshold_mean columns works.
-THRESHOLD_SOURCE_CSV = 'threshold_cv_summary_prev.csv'
+# from, resolved relative to the repository root. Defaults to the committed
+# calibration that this project's published thresholds come from — the same table
+# water_extent_timeseries.py and the QGIS plug-in defaults are based on.
+#
+# Set it to 'outputs/tables/final_threshold_summary.csv' to redraw against a fresh
+# fitting run instead. Any CSV with site / index / reference / threshold_mean
+# columns works.
+THRESHOLD_SOURCE_CSV = SCRIPT_DIR / 'data' / 'threshold_cv_summary.csv'
 
 # Epoch cuts — how the optimal threshold has drifted, so a recommendation can be
 # based on recent data rather than a 40-year average.
@@ -164,8 +210,10 @@ AOI_BOUNDS = {
 }
 AOIS = {'Great Salt Lake': aoi_gsl, 'Lake Abert': aoi_abert}
 
-# Landsat 4 is skipped: L5 already starts 1984, matching JRC's first month, so the
-# usable training window is identical and gee_pipeline.py stays untouched.
+# Landsat 4 is skipped: L5 already starts 1984, matching JRC's first month, so
+# adding L4 would widen the mission list without widening the usable training
+# window. Any sensor listed here must have an entry in COLLECTIONS, BAND_MAP,
+# and SENSOR_WINDOWS above.
 SENSORS         = ['L5', 'L7', 'L8', 'L9']
 ARCHIVE_START   = datetime.date(1984, 1, 1)
 ARCHIVE_END     = datetime.date.today()
@@ -176,12 +224,20 @@ JRC_START,   JRC_END   = '1984-03-01', '2021-12-31'   # GSW 1.4 monthly history
 DW_START,    DW_END    = '2015-06-27', ARCHIVE_END.isoformat()
 OPERA_START, OPERA_END = '2016-01-01', ARCHIVE_END.isoformat()
 
-# NWI wetland masks (1 = wetland), one local raster per site
-_QGIS_DIR = ('/Users/dean/Library/CloudStorage/OneDrive-AMA/Developers Academy '
-             'Virtual - Documents/Great Basin team/QGIS')
+# NWI wetland masks (1 = wetland), one local raster per site.
+#
+# These are NOT committed: GSL_Wetland_Raster.tif alone is ~114 MB, over GitHub's
+# 100 MB per-file hard limit, and a binary raster in git history is permanent
+# weight. Keep them outside the repo and point NWI_DIR at them:
+#     export NWI_DIR=/path/to/your/wetland/rasters
+# The default is data/nwi/ beside this script, which is gitignored.
+#
+# Only the NDMI/wetland calibration reads these; the NDWI and NDVI paths run
+# without them (see the guard in optimize_site).
+NWI_DIR = Path(os.environ.get('NWI_DIR', SCRIPT_DIR / 'data' / 'nwi'))
 NWI_RASTERS = {
-    'Great Salt Lake': f'{_QGIS_DIR}/GSL_Wetland_Raster.tif',
-    'Lake Abert':      f'{_QGIS_DIR}/Abert_Wetlands_Raster.tif',
+    'Great Salt Lake': NWI_DIR / 'GSL_Wetland_Raster.tif',
+    'Lake Abert':      NWI_DIR / 'Abert_Wetlands_Raster.tif',
 }
 
 NLCD_COLLECTION      = 'USGS/NLCD_RELEASES/2019_REL/NLCD'
@@ -617,6 +673,13 @@ def collect_ndmi(ls_col, aoi, nwi_raster_path, ndwi_water_threshold):
     intersection nor union) using the site's JRC-fit NDWI threshold — NDMI is a
     vegetation-moisture index and cannot be expected to flag open lake water.
     """
+    if not Path(nwi_raster_path).exists():
+        raise FileNotFoundError(
+            f"NWI raster not found: {nwi_raster_path}\n"
+            f"    These rasters are too large to commit (GSL is ~114 MB). "
+            f"Set NWI_DIR to wherever you keep them, or place them in "
+            f"{NWI_DIR}/ — see the README.")
+
     with rasterio.open(nwi_raster_path) as src:
         nwi, nwi_transform, nwi_crs = src.read(1), src.transform, src.crs
     to_nwi = Transformer.from_crs('EPSG:4326', nwi_crs, always_xy=True)
@@ -1686,12 +1749,21 @@ if __name__ == '__main__':
     else:
         # Figures-only pass: redraw everything from the persisted tables, no
         # sampling and no CV. Useful for restyling or adding an export format.
-        prev = pd.read_csv(table_path(THRESHOLD_SOURCE_CSV))
+        src = Path(THRESHOLD_SOURCE_CSV)
+        if not src.is_absolute():          # bare filename → this run's own output
+            src = table_path(src)
+        if not src.exists():
+            raise FileNotFoundError(
+                f"Threshold table not found: {src}\n"
+                f"    Set THRESHOLD_SOURCE_CSV, or run with RUN_OPTIMIZATION=True "
+                f"to fit thresholds first.")
+
+        prev = pd.read_csv(src)
         for site, g in prev.groupby('site'):
             thresholds_by_site[site] = {
                 (r['index'], r['reference']): float(r['threshold_mean'])
                 for _, r in g.iterrows()}
-        print(f"Loaded thresholds from {_rel(table_path(THRESHOLD_SOURCE_CSV))}")
+        print(f"Loaded thresholds from {_rel(src)}")
         for site, t in thresholds_by_site.items():
             print(f"  {site}: " + ', '.join(f'{i} vs {r} = {v:+.4f}'
                                             for (i, r), v in sorted(t.items())))

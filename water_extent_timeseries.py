@@ -68,6 +68,7 @@ Run: python water_extent_timeseries.py            # full pass, hits Earth Engine
 
 from __future__ import annotations
 
+import os
 import datetime
 import sys
 import time
@@ -80,10 +81,63 @@ import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from gee_pipeline import COLLECTIONS, BAND_MAP, SENSOR_WINDOWS
+# ── Landsat mission configuration ───────────────────────────────────────────
+# Previously imported from gee_pipeline.py, which is retired. Inlined verbatim
+# so this script is self-contained; the band mappings match the plugin's
+# Lake_Classifer_FD/ee_backend.py, which is the authoritative copy for the QGIS
+# side. L5 is defined but unused — LANDSAT_SENSORS starts at L7.
+#
+# Collection 2, Tier 1, Level 2 surface reflectance.
+COLLECTIONS = {
+    "L5": "LANDSAT/LT05/C02/T1_L2",   # 1984-01-01 – 2012-05-05
+    "L7": "LANDSAT/LE07/C02/T1_L2",   # 1999-01-01 – 2022-04-06 (SLC-off 2003+)
+    "L8": "LANDSAT/LC08/C02/T1_L2",   # 2013-04-11 – present
+    "L9": "LANDSAT/LC09/C02/T1_L2",   # 2022-02-10 – present
+}
 
-SCRIPT_DIR    = Path(__file__).resolve().parent
-THRESHOLD_CSV = SCRIPT_DIR / "New Folder With Items" / "threshold_cv_summary.csv"
+# Mission-specific band numbers -> the shared names the index math uses. TM/ETM+
+# and OLI number their bands differently; this is what lets one threshold be
+# applied across all missions.
+BAND_MAP = {
+    "L5": {"blue": "SR_B1", "green": "SR_B2", "red": "SR_B3",
+           "nir":  "SR_B4", "swir1": "SR_B5"},
+    "L7": {"blue": "SR_B1", "green": "SR_B2", "red": "SR_B3",
+           "nir":  "SR_B4", "swir1": "SR_B5"},
+    "L8": {"blue": "SR_B2", "green": "SR_B3", "red": "SR_B4",
+           "nir":  "SR_B5", "swir1": "SR_B6"},
+    "L9": {"blue": "SR_B2", "green": "SR_B3", "red": "SR_B4",
+           "nir":  "SR_B5", "swir1": "SR_B6"},
+}
+
+# Operational window per mission, so a date filter never asks a satellite for
+# imagery it could not have taken. date.max means "still operating".
+SENSOR_WINDOWS = {
+    "L5": (datetime.date(1984,  1,  1), datetime.date(2012,  5,  5)),
+    "L7": (datetime.date(1999,  1,  1), datetime.date(2022,  4,  6)),
+    "L8": (datetime.date(2013,  4, 11), datetime.date.max),
+    "L9": (datetime.date(2022,  2, 10), datetime.date.max),
+}
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+# Calibrated thresholds. Any CSV with site / index / reference / threshold_mean /
+# cv_iou columns works; the best-scoring NDWI and NDVI row per site is selected
+# (see load_thresholds). Override with:
+#     export THRESHOLD_CSV=/path/to/thresholds.csv
+#
+# This file is NOT produced by anything in this repository. It comes from the
+# superseded threshold_optimization_cv.py. final_threshold_optimization.py writes
+# outputs/tables/final_threshold_summary.csv instead, which is column-compatible
+# and can be pointed at directly — note it holds a different (later) calibration,
+# so switching changes the thresholds the time series is built on.
+THRESHOLD_CSV = Path(os.environ.get(
+    'THRESHOLD_CSV', SCRIPT_DIR / 'data' / 'threshold_cv_summary.csv'))
+
+# Earth Engine Cloud project. Kept out of source control: set EE_PROJECT in the
+# environment rather than hardcoding an ID here, so a project identifier cannot
+# be committed by accident.
+#     export EE_PROJECT=your-ee-project-id
+EE_PROJECT = os.environ.get('EE_PROJECT', 'your-ee-project-id')
 
 AOI_BOUNDS = {
     'Great Salt Lake': (-113.3061047, 40.51087812, -111.8534658, 41.87473984),
@@ -156,10 +210,71 @@ USGS_ELEVATION_STATIONS = {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. Thresholds — pick the best NDWI row and best NDVI row per site
+# 1. Thresholds — one pinned reference per index, both sites
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Which validation reference supplies each index's threshold. Pinned explicitly
+# rather than chosen by best cv_iou, because that rule picked the reference by
+# accident of scoring rather than by whether the reference covers the period
+# being analysed.
+#
+# NDWI defaults to JRC Global Surface Water. This script is the HISTORICAL
+# analysis, and JRC's monthly history (1984–2021) is the reference that spans
+# that record. The QGIS plug-in uses OPERA at both sites instead, because it
+# classifies a single recent summer composite — see the README.
+#
+# LAKE ABERT IS THE EXCEPTION, and it is a coverage argument, not a scoring one.
+# Its USGS gauge came online in 2023, so every gauge-paired month in the
+# stage-area analysis falls in 2023–2026 — entirely after JRC stopped being
+# compiled in 2021. Calibrating Abert against JRC would fit a threshold on a
+# period the analysis does not cover. OPERA (2016–present) does cover it.
+# Great Salt Lake keeps JRC: its gauge record starts in 1999, and 144 of its 175
+# gauge-paired months fall inside JRC's window.
+#
+# This reproduces the published technical report exactly (Abert rho = 0.44,
+# n = 20; GSL south arm rho = 0.87, n = 175).
+#
+# NDVI → Dynamic World, the only vegetation reference in the table.
+#
+# MNDWI rows are ignored: this script computes no MNDWI band.
+INDEX_REFERENCE = {
+    'NDWI': 'JRC',
+    'NDVI': 'DW',
+}
+
+INDEX_REFERENCE_BY_SITE = {
+    ('NDWI', 'Lake Abert'): 'OPERA',
+}
+
+
+def _reference_for(index: str, site: str) -> str:
+    """The reference dataset supplying `index` at `site`."""
+    return INDEX_REFERENCE_BY_SITE.get((index, site), INDEX_REFERENCE[index])
+
+
+def _pick(rows: pd.DataFrame, index: str, site: str, csv_path) -> pd.Series:
+    """The row for `index` from its pinned reference, or a clear error."""
+    want = _reference_for(index, site)
+    hit = rows[rows['reference'] == want]
+    if hit.empty:
+        available = ', '.join(sorted(rows['reference'].unique())) or 'none'
+        raise ValueError(
+            f"'{site}' has no {index} row from reference '{want}' in {csv_path}.\n"
+            f"    Available {index} references: {available}.\n"
+            f"    Adjust INDEX_REFERENCE if this calibration uses a different one.")
+    # Defensive: a table with repeated site/index/reference rows would otherwise
+    # pick an arbitrary one. Prefer the best-scoring duplicate.
+    return hit.loc[hit['cv_iou'].idxmax()]
+
+
 def load_thresholds(csv_path: Path) -> dict:
+    if not Path(csv_path).exists():
+        raise FileNotFoundError(
+            f"Threshold table not found: {csv_path}\n"
+            f"    Set THRESHOLD_CSV to your calibration table, or point it at "
+            f"outputs/tables/final_threshold_summary.csv from "
+            f"final_threshold_optimization.py — see the README.")
+
     df = pd.read_csv(csv_path)
     thresholds = {}
     for site, g in df.groupby('site'):
@@ -167,8 +282,8 @@ def load_thresholds(csv_path: Path) -> dict:
         ndvi_rows = g[g['index'] == 'NDVI']
         if ndwi_rows.empty or ndvi_rows.empty:
             raise ValueError(f"'{site}' is missing an NDWI or NDVI row in {csv_path}")
-        best_ndwi = ndwi_rows.loc[ndwi_rows['cv_iou'].idxmax()]
-        best_ndvi = ndvi_rows.loc[ndvi_rows['cv_iou'].idxmax()]
+        best_ndwi = _pick(ndwi_rows, 'NDWI', site, csv_path)
+        best_ndvi = _pick(ndvi_rows, 'NDVI', site, csv_path)
         thresholds[site] = {
             'ndwi_threshold': float(best_ndwi['threshold_mean']),
             'ndwi_reference': best_ndwi['reference'],
@@ -698,7 +813,7 @@ if __name__ == '__main__':
 
     if not replot_only:
         ee.Authenticate()
-        ee.Initialize(project='great-basin-499014')
+        ee.Initialize(project=EE_PROJECT)
         thresholds = load_thresholds(THRESHOLD_CSV)
 
     all_dfs = []

@@ -1,0 +1,5 @@
+site,reference,threshold_mean,threshold_std,n_train,n_test,n_blocks,n_wetland,cv_iou,test_iou,test_f1,test_precision,test_recall
+Lake Abert,NWI,0.123,0.0187,3375,857,1988,289,0.218,0.216,0.355,0.329,0.385
+Lake Abert,NLCD,0.0487,0.0283,3375,857,1988,279,0.21,0.178,0.302,0.218,0.491
+Great Salt Lake,NLCD,0.0077,0.0522,2914,734,3248,194,0.089,0.08,0.149,0.085,0.588
+Great Salt Lake,NWI,0.053,0.0087,2914,734,3248,143,0.084,0.092,0.169,0.1,0.548
