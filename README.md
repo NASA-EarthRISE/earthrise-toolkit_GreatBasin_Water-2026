@@ -1,4 +1,4 @@
-# develop-Water_Virtual_2026_1
+# Lake Classifier QGIS Plug-In - develop-Water_Virtual_2026_1
 
 [![Python: 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
