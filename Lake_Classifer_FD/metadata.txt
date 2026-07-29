@@ -9,15 +9,13 @@ version=1.0.0
 
 description=Generate Landsat-derived imagery and classify open water, wetlands, and land using NDWI, NDVI, and NDMI for long-term saline lake monitoring.
 
-about=The Saline Lake Classifier is a QGIS plugin that uses Google Earth Engine to generate Landsat-derived imagery, calculate NDWI, NDVI, and NDMI, classify open water, wetlands, and land using threshold-based methods, and export imagery and time-series data for environmental monitoring of saline lakes.
+about=about=The Saline Lake Classifier is a QGIS plugin developed for long-term monitoring of saline lakes and wetlands. The plugin accesses Landsat 5 TM, Landsat 7 ETM+, Landsat 8 OLI/TIRS, and Landsat 9 OLI-2/TIRS-2 Collection 2 Level-2 Surface Reflectance imagery through Google Earth Engine, providing observations from 1985 to 2026. It generates true-color imagery, land surface temperature, NDWI, NDVI, NDMI, threshold-based land classifications, and monthly median spectral index values for the summer season. Evapotranspiration is generated using the OpenET Ensemble CONUS GRIDMET Monthly v2.0 dataset, which provides monthly satellite-derived estimates of actual evapotranspiration by combining multiple OpenET models with GRIDMET meteorological data.
 
 author=Katie Bossert, Sofia Garcia, Dean Gelling, Vivian Maneval, and Kayla Sundling
 
 email=<team email or primary contact>
 
 repository=<insert>
-
-tracker=<insert>
 
 tags=QGIS, Google Earth Engine, Landsat, remote sensing, wetlands, saline lakes, NDWI, NDVI, NDMI
 
