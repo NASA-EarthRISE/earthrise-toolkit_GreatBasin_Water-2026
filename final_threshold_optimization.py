@@ -275,6 +275,22 @@ REFERENCES = {
     'NLCD':  [('NDMI', 'above')],
 }
 
+# The (index, reference) pairs this table must carry for every site. These are
+# what water_extent_timeseries.py reads and what supplies the plug-in's NDWI and
+# NDVI defaults. A run is checked against this list before it finishes.
+#
+# NDMI is deliberately absent. threshold_optimization_ndmi.py owns the wetland
+# moisture cutoff, and its narrower 2010-2020 Landsat 8/9 window succeeds at both
+# sites where the full-archive composite below exhausts Earth Engine's memory on
+# the larger Great Salt Lake AOI. This script still fits NDMI where it can, but
+# those rows are secondary; data/ndmi_threshold_cv_all.csv is authoritative, and
+# the complete threshold set is the union of the two outputs.
+REQUIRED_ROWS = [
+    ('NDWI', 'JRC'),      # historical water extent (Great Salt Lake)
+    ('NDWI', 'OPERA'),    # plug-in default at both sites; historical at Abert
+    ('NDVI', 'DW'),       # vegetation cutoff
+]
+
 # Residual maps / confusion matrices use the OPERA-window scene.
 OPERA_RESIDUAL_YEAR = 2023
 OPERA_MAX_DAYS      = 6
@@ -1705,6 +1721,29 @@ if __name__ == '__main__':
             print(f"\n=== Final thresholds (test_* is the defensible number) ===")
             print(summary.to_string(index=False))
             print(f"\nSaved {_rel(out_csv)}")
+
+            # Completeness check against what actually consumes this table. A
+            # reference can drop out silently when its collection fails, leaving
+            # a short table that still looks valid, so state plainly which rows
+            # are missing before anything downstream reads it.
+            missing = [(site, index, ref)
+                       for site in AOIS
+                       for index, ref in REQUIRED_ROWS
+                       if summary[(summary['site'] == site)
+                                  & (summary['index'] == index)
+                                  & (summary['reference'] == ref)].empty]
+            if missing:
+                print(f"\n!! {len(missing)} of {len(AOIS) * len(REQUIRED_ROWS)} required "
+                      f"row(s) are MISSING from {_rel(out_csv)}:")
+                for site, index, ref in missing:
+                    print(f"     {site:18} {index} vs {ref}")
+                print("   Downstream consumers will fail on these. Scroll up for the "
+                      "collection error that caused each one.\n")
+            else:
+                print("All NDWI/NDVI rows required by water_extent_timeseries.py "
+                      "and the plug-in defaults are present.")
+                print("NDMI comes from threshold_optimization_ndmi.py; the complete "
+                      "threshold set is the union of both outputs.")
 
             # Persist the ROC inputs. They live only in memory otherwise, which
             # makes roc_curves.png the one figure a RUN_OPTIMIZATION=False pass
