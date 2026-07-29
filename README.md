@@ -173,18 +173,6 @@ union of their outputs:
 | NDWI, NDVI | `final_threshold_optimization.py` | Per-scene sampling time-joined to JRC, OPERA, and Dynamic World |
 | NDMI | `threshold_optimization_ndmi.py` | Its narrower 2010–2020 Landsat 8/9 window succeeds at both sites |
 
-`final_threshold_optimization.py` still fits NDMI where it can, but treat those
-rows as secondary. Its NDMI step builds a growing-season median across the full
-1984–2026 archive over four sensors, which exhausts Earth Engine's memory on the
-larger Great Salt Lake AOI even at the highest tile scale the script escalates
-to. The last full run produced an Abert NDMI row and no Great Salt Lake one.
-`data/ndmi_threshold_cv_all.csv` is authoritative for NDMI and covers both sites.
-
-Because a failed collection is caught so it cannot lose the references already
-gathered, a short table can still look valid. Every run therefore ends by
-checking its output against the NDWI and NDVI rows the downstream consumers need,
-and naming any that are missing.
-
 Each shipped default traces to a specific calibration row. The IoU column below
 holds test-set values, from the one-time evaluation conducted against the
 untouched test data after the mean threshold was finalized for each index. These
@@ -489,26 +477,10 @@ self-contained, but each needs attention:
    have to be supplied separately. Both paths are configurable through
    `THRESHOLD_CSV` and `NWI_DIR`, and both scripts fail with an explicit message
    naming the missing file instead of a bare traceback.
-2. **`threshold_cv_summary.csv` has no producer in this repository**, which
-   means the shipped NDWI and NDVI thresholds cannot be re-derived here. It came
-   from `threshold_optimization_cv.py`, an earlier script superseded by
-   `final_threshold_optimization.py`. Committing that script would close the gap.
-   Standardising on `final_threshold_summary.csv` is the alternative, since it is
-   column-compatible, but it holds different values and would change both the
-   plug-in defaults and the resulting extents.
-3. **`Lake_Classifer_FD/metadata.txt` has unfilled placeholders.** The `email`,
+
+2. **`Lake_Classifer_FD/metadata.txt` has unfilled placeholders.** The `email`,
    `repository`, and `tracker` fields still read `<insert>` and `<team email or
    primary contact>`. QGIS surfaces these in the plug-in manager.
-
-Smaller items, documented inline in the source:
-
-- `dock.py`: `_fetch_openet` returns its success message instead of writing it to
-  the status label, so the label stays on "Fetching…" after a successful fetch.
-  It also assigns the OpenET layer to `self.lst_layer`, overwriting the LST
-  handle.
-- `dock.py`: `_classify_raster` silently drops the NDMI condition if the index
-  raster has fewer than three bands, which widens the wetland class. The current
-  `ee_backend` always emits three bands, so the path is unreachable today.
 
 ## Known uncertainties
 

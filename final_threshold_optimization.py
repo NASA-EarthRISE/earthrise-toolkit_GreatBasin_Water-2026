@@ -177,14 +177,19 @@ RUN_RESIDUAL_MAPS = True
 RUN_TIMESERIES    = False   # ~511 months; enable once the table looks right
 
 # Which table the figures-only pass (RUN_OPTIMIZATION=False) reads its thresholds
-# from, resolved relative to the repository root. Defaults to the committed
-# calibration that this project's published thresholds come from — the same table
-# water_extent_timeseries.py and the QGIS plug-in defaults are based on.
+# from. A bare filename resolves inside outputs/tables/; an absolute path is used
+# as given.
 #
-# Set it to 'outputs/tables/final_threshold_summary.csv' to redraw against a fresh
-# fitting run instead. Any CSV with site / index / reference / threshold_mean
-# columns works.
-THRESHOLD_SOURCE_CSV = SCRIPT_DIR / 'data' / 'threshold_cv_summary.csv'
+# This defaults to this script's own output so that both modes agree. A full run
+# draws its residual maps from the thresholds it just fitted, and a figures-only
+# pass redraws them from the table those same thresholds were written to, so the
+# two produce the same figures.
+#
+# Point it at SCRIPT_DIR / 'data' / 'threshold_cv_summary.csv' to redraw against
+# the published calibration instead, which is a different fit and will move the
+# residual maps. Any CSV with site / index / reference / threshold_mean columns
+# works.
+THRESHOLD_SOURCE_CSV = 'final_threshold_summary.csv'
 
 # Epoch cuts — how the optimal threshold has drifted, so a recommendation can be
 # based on recent data rather than a 40-year average.
