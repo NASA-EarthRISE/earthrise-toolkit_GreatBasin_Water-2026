@@ -1,11 +1,11 @@
-name: Release Readiness Pilot
+name: Release Readiness
 
 on:
-  push:
-    branches:
-      - quality-gate-pilot
-
   pull_request:
+    branches:
+      - main
+
+  push:
     branches:
       - main
 
