@@ -154,14 +154,8 @@ of two committed tables:
 
 | Shipped default | Table | Producer |
 |-----------------|-------|----------|
-| NDWI, NDVI (all four values) | `data/threshold_cv_summary.csv` | An earlier script, not in this repository (see [Known gaps](#known-gaps)) |
+| NDWI, NDVI (all four values) | `data/final_threshold_summary.csv` | `final_threshold_optimization.py` |
 | NDMI (both values) | `data/ndmi_threshold_cv_all.csv` | `threshold_optimization_ndmi.py` |
-
-`final_threshold_optimization.py` writes a third table,
-`outputs/tables/final_threshold_summary.csv`. It is a separate, later calibration
-and none of its values were shipped. It gives −0.0214 and −0.0760 for OPERA NDWI
-where the plug-in ships −0.055 and −0.063, so running it produces a new
-calibration instead of reproducing the published one.
 
 ### Which script owns which index
 
@@ -178,7 +172,7 @@ holds test-set values, from the one-time evaluation conducted against the
 untouched test data after the mean threshold was finalized for each index. These
 test-set metrics represent the defensible, final performance of each
 index/reference threshold combination, and they are the numbers published in
-Table 2 of the technical report.
+Table 2 of the tech paper.
 
 | Site | Index | Default | Reference | IoU | F1 |
 |------|-------|---------|-----------|-----|-----|
@@ -254,7 +248,7 @@ Two things to know before recalibrating:
 
 ## Running the calibration scripts
 
-Neither script is needed for day-to-day plug-in use. Run them to recalibrate.
+Neither script is needed for day-to-day plug-in use. Only run them to reoptimize, based on different parameters or AOIs.
 
 ### `final_threshold_optimization.py`
 
