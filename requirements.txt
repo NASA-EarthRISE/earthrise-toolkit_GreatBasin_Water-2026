@@ -141,6 +141,7 @@ aiohttp
 # ── Utilities ─────────────────────────────────────────────────────────────
 tqdm
 click
+PyYAML
 pydantic
 python-dotenv
 loguru

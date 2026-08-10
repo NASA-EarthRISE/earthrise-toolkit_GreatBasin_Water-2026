@@ -1,0 +1,20 @@
+earth_engine:
+  hydrolakes_asset: projects/sat-io/open-datasets/HydroLakes/lake_poly_v10
+  states_asset: TIGER/2018/States
+
+region:
+  states:
+    - AZ
+    - CA
+    - CO
+    - ID
+    - MT
+    - NV
+    - NM
+    - OR
+    - UT
+    - WA
+    - WY
+
+selection:
+  min_area_km2: 25
