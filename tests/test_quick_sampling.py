@@ -249,6 +249,10 @@ class ThresholdOptimizationTests(unittest.TestCase):
         self.assertGreaterEqual(summary["n_blocks"], self.settings.min_blocks)
         self.assertLess(summary["threshold_mean"], 0.35)
         self.assertGreater(summary["threshold_mean"], -0.40)
+        self.assertIn("_threshold_exact", summary)
+        self.assertEqual(
+            summary["threshold_mean"], round(summary["_threshold_exact"], 4)
+        )
         self.assertEqual(summary["test_iou"], 1.0)
         self.assertEqual(summary["test_f1"], 1.0)
         self.assertEqual(summary["test_precision"], 1.0)

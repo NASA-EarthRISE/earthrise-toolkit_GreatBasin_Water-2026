@@ -1112,6 +1112,9 @@ def optimize_samples(
     )
     summary.update(
         {
+            # Kept only in the in-memory result. summary_dataframe() preserves
+            # the established compact output contract and drops private keys.
+            "_threshold_exact": threshold_mean,
             "threshold_mean": round(threshold_mean, 4),
             "threshold_std": round(threshold_std, 4),
             "cv_iou": round(cv_iou, 3),

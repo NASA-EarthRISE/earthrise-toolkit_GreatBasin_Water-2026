@@ -54,6 +54,8 @@ class CombinationResult:
     raw_columns: tuple[str, ...]
     lake_feature: Any | None
     buffered_aoi: Any | None
+    sample_retrieval_seconds: float = float("nan")
+    optimization_seconds: float = float("nan")
 
 
 @dataclass
@@ -120,7 +122,10 @@ def run_lake_reference(
     raw_columns: tuple[str, ...] = ()
     lake_feature = None
     buffered_aoi = None
+    sample_retrieval_seconds = float("nan")
+    optimization_seconds = float("nan")
     try:
+        retrieval_start = time.perf_counter()
         lake_feature, buffered_aoi = build_buffered_lake_aoi(
             ee_module,
             hydrolakes_asset,
@@ -148,8 +153,11 @@ def run_lake_reference(
         )
         samples = transfer.frame
         raw_columns = transfer.raw_columns
+        sample_retrieval_seconds = time.perf_counter() - retrieval_start
         diagnostics = sample_diagnostics(samples)
+        optimization_start = time.perf_counter()
         summary = optimize_samples(samples, lake, reference, settings)
+        optimization_seconds = time.perf_counter() - optimization_start
     # Combination isolation is intentional: Earth Engine raises several public
     # exception types depending on whether graph construction or transfer fails.
     except Exception as exc:  # noqa: BLE001
@@ -165,6 +173,8 @@ def run_lake_reference(
         raw_columns=raw_columns,
         lake_feature=lake_feature,
         buffered_aoi=buffered_aoi,
+        sample_retrieval_seconds=round(sample_retrieval_seconds, 2),
+        optimization_seconds=round(optimization_seconds, 2),
     )
 
 
