@@ -259,9 +259,7 @@ def build_western_state_collection(
         found = tuple(
             sorted(
                 str(code)
-                for code in collection.aggregate_array("STUSPS")
-                .distinct()
-                .getInfo()
+                for code in collection.aggregate_array("STUSPS").distinct().getInfo()
             )
         )
     except Exception as exc:
@@ -558,8 +556,7 @@ def validate_candidate_table(
     if invalid_longitude.any():
         rows = table.index[invalid_longitude].tolist()
         raise CandidateTableError(
-            "centroid_lon must be within [-180, 180]; invalid rows: "
-            f"{rows}."
+            f"centroid_lon must be within [-180, 180]; invalid rows: {rows}."
         )
 
     latitude = pd.to_numeric(table["centroid_lat"], errors="coerce")
@@ -567,8 +564,7 @@ def validate_candidate_table(
     if invalid_latitude.any():
         rows = table.index[invalid_latitude].tolist()
         raise CandidateTableError(
-            "centroid_lat must be within [-90, 90]; invalid rows: "
-            f"{rows}."
+            f"centroid_lat must be within [-90, 90]; invalid rows: {rows}."
         )
 
     allowed_states = set(configured_states)
@@ -677,9 +673,7 @@ def boundary_ambiguity_table(
     ]
     raw = feature_collection_to_dataframe(
         ee_module,
-        candidate_collection.filter(
-            ee_module.Filter.gt(_STATE_MATCH_COUNT, 1)
-        ),
+        candidate_collection.filter(ee_module.Filter.gt(_STATE_MATCH_COUNT, 1)),
         properties,
         page_size=page_size,
     )
@@ -691,10 +685,14 @@ def boundary_ambiguity_table(
     for column in columns:
         if column not in raw.columns:
             raw[column] = pd.NA
-    return raw.reindex(columns=columns).sort_values(
-        ["Hylak_id"],
-        kind="mergesort",
-    ).reset_index(drop=True)
+    return (
+        raw.reindex(columns=columns)
+        .sort_values(
+            ["Hylak_id"],
+            kind="mergesort",
+        )
+        .reset_index(drop=True)
+    )
 
 
 def _exact_name_matches(table: pd.DataFrame, anchor_name: str) -> pd.DataFrame:
@@ -732,9 +730,7 @@ def _geographic_anchor_diagnostic(
         passes_area = ee_module.Number(feature.get("Lake_area")).gte(
             float(min_area_km2)
         )
-        passes_state = ee_module.Number(
-            feature.get(_REGIONAL_STATE_MATCH_COUNT)
-        ).gt(0)
+        passes_state = ee_module.Number(feature.get(_REGIONAL_STATE_MATCH_COUNT)).gt(0)
         return feature.set(
             {
                 _ANCHOR_CONTAINS_CENTER: geometry.contains(aoi_center, 1),
@@ -794,12 +790,16 @@ def _geographic_anchor_diagnostic(
         raw[_ANCHOR_INTERSECTION_KM2],
         errors="coerce",
     )
-    ranked = raw.reindex(columns=source_columns).sort_values(
-        [_ANCHOR_CONTAINS_CENTER, _ANCHOR_INTERSECTION_KM2, "Lake_area"],
-        ascending=[False, False, False],
-        kind="mergesort",
-        na_position="last",
-    ).reset_index(drop=True)
+    ranked = (
+        raw.reindex(columns=source_columns)
+        .sort_values(
+            [_ANCHOR_CONTAINS_CENTER, _ANCHOR_INTERSECTION_KM2, "Lake_area"],
+            ascending=[False, False, False],
+            kind="mergesort",
+            na_position="last",
+        )
+        .reset_index(drop=True)
+    )
     ranked[_ANCHOR_LIKELY] = False
     ranked.loc[0, _ANCHOR_LIKELY] = True
     return ranked.reindex(columns=report_columns).head(10)
@@ -862,13 +862,11 @@ def check_anchor_sites(
             method="existing-AOI geographic diagnostic",
             records=geographic,
             note=(
-                reason
-                + " Candidates intersecting the unchanged repository AOI are "
+                reason + " Candidates intersecting the unchanged repository AOI are "
                 "ranked by center containment, intersecting area, and Lake_area; "
                 "the top-ranked record is explicitly flagged. Up to ten source "
                 "features are shown with area/state screening status. This is a "
-                "naming/geometry diagnostic, not a new AOI definition."
-                + naming_note
+                "naming/geometry diagnostic, not a new AOI definition." + naming_note
             ),
         )
     return checks
@@ -949,8 +947,7 @@ def print_summary(result: DiscoveryResult, output_path: str | Path) -> None:
     print(
         "States: "
         + ", ".join(
-            f"{state}={count}"
-            for state, count in summary["counts_by_state"].items()
+            f"{state}={count}" for state, count in summary["counts_by_state"].items()
         )
     )
     print(
@@ -961,13 +958,11 @@ def print_summary(result: DiscoveryResult, output_path: str | Path) -> None:
         )
     )
     print(
-        f"Names: {summary['named_count']} present, "
-        f"{summary['unnamed_count']} missing"
+        f"Names: {summary['named_count']} present, {summary['unnamed_count']} missing"
     )
     if summary["total_candidates"]:
         quantiles = ", ".join(
-            f"{name}={value:.3f}"
-            for name, value in area["quantiles"].items()
+            f"{name}={value:.3f}" for name, value in area["quantiles"].items()
         )
         print(
             f"Lake_area km²: min={area['min']:.3f}, "
@@ -986,8 +981,7 @@ def print_summary(result: DiscoveryResult, output_path: str | Path) -> None:
         "Missing optional values: "
         + (
             ", ".join(
-                f"{field}={count}"
-                for field, count in missing_optional_values.items()
+                f"{field}={count}" for field, count in missing_optional_values.items()
             )
             or "none"
         )

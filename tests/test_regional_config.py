@@ -57,8 +57,9 @@ class ConfigTests(unittest.TestCase):
 
     def test_non_positive_minimum_area_is_rejected(self) -> None:
         for value in (0, -1, -0.01):
-            with self.subTest(value=value), self.assertRaisesRegex(
-                ConfigError, "greater than zero"
+            with (
+                self.subTest(value=value),
+                self.assertRaisesRegex(ConfigError, "greater than zero"),
             ):
                 validate_config(valid_mapping(value))
 

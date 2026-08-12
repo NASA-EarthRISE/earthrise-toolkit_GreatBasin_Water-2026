@@ -116,7 +116,9 @@ class CandidateTableTests(unittest.TestCase):
             "Vol_total",
             "Depth_avg",
         ]
-        self.assertEqual(candidate_output_columns(reversed(available)), expected_columns)
+        self.assertEqual(
+            candidate_output_columns(reversed(available)), expected_columns
+        )
         self.assertEqual(prepared.columns.tolist(), expected_columns)
         self.assertEqual(prepared["Hylak_id"].tolist(), [102, 101])
 

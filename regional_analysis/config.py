@@ -150,7 +150,9 @@ def load_config(path: str | Path) -> DiscoveryConfig:
     try:
         text = config_path.read_text(encoding="utf-8")
     except OSError as exc:
-        raise ConfigError(f"Could not read configuration '{config_path}': {exc}") from exc
+        raise ConfigError(
+            f"Could not read configuration '{config_path}': {exc}"
+        ) from exc
 
     try:
         parsed = yaml.safe_load(text)
