@@ -818,7 +818,12 @@ def _remove_all_text(fig: mpl.figure.Figure) -> None:
         text_artist.set_visible(False)
     for legend in list(fig.legends):
         legend.set_visible(False)
-    for axis in fig.axes:
+    axes = list(fig.axes)
+    for axis in axes:
+        for child_axis in axis.child_axes:
+            if child_axis not in axes:
+                axes.append(child_axis)
+    for axis in axes:
         for location in ("left", "center", "right"):
             axis.set_title("", loc=location)
         axis.set_xlabel("")

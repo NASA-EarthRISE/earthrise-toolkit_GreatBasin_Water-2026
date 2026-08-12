@@ -160,6 +160,11 @@ class PlotDataTests(unittest.TestCase):
             axis.set_ylabel("Y label")
             axis.annotate("annotation", (0.5, 0.5))
             axis.legend()
+            inset = axis.inset_axes([0.55, 0.15, 0.35, 0.35])
+            inset.plot([0, 1], [1, 0])
+            inset.set_title("Inset title")
+            inset.set_xlabel("Inset x")
+            inset.annotate("Inset annotation", (0.5, 0.5))
 
             save_figure_with_no_text(fig, destination, "test_figure")
             normal_png = destination / "test_figure.png"

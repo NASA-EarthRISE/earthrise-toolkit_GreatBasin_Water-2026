@@ -149,13 +149,18 @@ The calibration scripts at the repository root are tools for deriving thresholds
 They are not part of the plug-in, and you only need them to re-derive or update a
 threshold.
 
-Each of the six `DEFAULT_THRESHOLDS` in `Lake_Classifer_FD/dock.py` traces to one
-of two committed tables:
+Each of the six `DEFAULT_THRESHOLDS` values exposed by
+`Lake_Classifer_FD/threshold_profiles.py` traces to one of two committed tables:
 
 | Shipped default | Table | Producer |
 |-----------------|-------|----------|
-| NDWI, NDVI (all four values) | `data/final_threshold_summary.csv` | `final_threshold_optimization.py` |
+| NDWI, NDVI (all four values) | `data/threshold_cv_summary.csv` | Superseded calibration workflow (`threshold_optimization_cv.py`, not present) |
 | NDMI (both values) | `data/ndmi_threshold_cv_all.csv` | `threshold_optimization_ndmi.py` |
+
+The plug-in remains independent from both the calibration scripts and
+`regional_analysis`. Tier 1 regional thresholds are exploratory research
+outputs, are not plug-in defaults, and have not been validated as defaults for
+custom AOIs.
 
 ### Which script owns which index
 

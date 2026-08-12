@@ -66,6 +66,8 @@ from qgis.core import (
 )
 from qgis.gui import QgsMapTool, QgsRubberBand
 
+from .threshold_profiles import DEFAULT_THRESHOLDS
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -91,25 +93,6 @@ WGS84 = QgsCoordinateReferenceSystem("EPSG:4326")
 # Newest first so the dropdown opens on the most recent year. The lower bound is
 # 1984 because that is where the Landsat archive usable here begins (L5 onward).
 YEARS = [str(y) for y in range(2026, 1984, -1)]
-
-# Per-lake starting thresholds, applied whenever the preset changes. These are
-# not guesses: they come from the external spatial-block cross-validation runs
-# (NDWI vs OPERA, NDVI vs Dynamic World), which is why they are lake-specific
-# rather than one global default — Abert's water cutoff sits lower than GSL's
-# because its shallow, turbid margins depress NDWI.
-# NDMI is the least certain of the three; it drives only the wetland class.
-DEFAULT_THRESHOLDS = {
-    "Great Salt Lake, UT": {
-        "ndwi": -0.055,
-        "ndvi": 0.165,
-        "ndmi": 0.053,
-    },
-    "Lake Abert, OR": {
-        "ndwi": -0.063,
-        "ndvi": 0.130,
-        "ndmi": 0.123,
-    },
-}
 
 # Colour ramps for the continuous index layers, as (value, hex, legend label).
 # Entries with an empty label are interpolation anchors only — they shape the
