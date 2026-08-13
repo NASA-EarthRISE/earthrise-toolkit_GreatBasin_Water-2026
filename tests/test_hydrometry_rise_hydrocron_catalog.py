@@ -202,6 +202,19 @@ class RiseParsingTests(unittest.TestCase):
         )
         self.assertEqual(observations[0].item_id, 341)
 
+    def test_provider_null_result_is_retained_as_missing_not_zero(self) -> None:
+        item = parse_catalog_item(
+            _fixture("rise_item_341.json"),
+            expected_item_id=341,
+            expected_record_id=2300,
+        )
+        payload = copy.deepcopy(_fixture("rise_results_341_page1.json"))
+        payload["data"][0]["attributes"]["result"] = None
+        observations, _total, _size, _page = parse_results_page(
+            payload, expected_item=item
+        )
+        self.assertIsNone(observations[0].value)
+
     def test_result_pagination_is_bounded_and_uses_item_id(self) -> None:
         item = parse_catalog_item(
             _fixture("rise_item_341.json"),

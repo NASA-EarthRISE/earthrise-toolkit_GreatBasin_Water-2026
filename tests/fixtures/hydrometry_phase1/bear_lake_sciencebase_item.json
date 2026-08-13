@@ -1,0 +1,59 @@
+{
+  "id": "698226f4b66b018d00102e42",
+  "title": "Half-meter topobathymetric elevation model and elevation-area-volume tables for Bear Lake, Utah and Idaho, 2002-2018",
+  "summary": "This official Bear Lake release includes a topobathymetric raster and elevation-area-volume relationships calculated at 0.01-meter intervals. Elevations are referenced to NAVD88.",
+  "citation": "Root, J.C., Denny, J.F., Danforth, W.W., and Colman, S.M., 2026, Half-meter topobathymetric elevation model and elevation-area-volume tables for Bear Lake, Utah and Idaho, 2002-2018: U.S. Geological Survey data release, https://doi.org/10.5066/P14KZS2D.",
+  "rights": "This work is marked with the Creative Commons Zero v1.0 Universal (CC0-1.0) public domain dedication.",
+  "identifiers": [
+    {
+      "type": "DOI",
+      "key": "doi:10.5066/P14KZS2D"
+    }
+  ],
+  "dates": [
+    {
+      "type": "Publication",
+      "dateString": "2026-03-31"
+    },
+    {
+      "type": "Start",
+      "dateString": "2002-09-04"
+    },
+    {
+      "type": "End",
+      "dateString": "2018-07-01"
+    }
+  ],
+  "provenance": {
+    "dateCreated": "2026-02-03T16:48:52Z",
+    "lastUpdated": "2026-03-31T16:09:48Z"
+  },
+  "files": [
+    {
+      "name": "Bear_Lake_TBDEM_2026_50cm.zip",
+      "contentType": "application/zip",
+      "size": 1339051329,
+      "downloadUri": "https://sciencebase.usgs.gov/manager/download/fixture-raster"
+    },
+    {
+      "name": "Bear_Lake_TBDEM_2026_ElevAreaVolume.csv",
+      "contentType": "text/csv",
+      "size": 369,
+      "downloadUri": "https://www.sciencebase.gov/catalog/file/get/698226f4b66b018d00102e42?f=fixture-eav",
+      "checksum": {
+        "type": "MD5",
+        "value": "ca6b4ff34b962e1e63c3232e7d64dc56"
+      }
+    },
+    {
+      "name": "Half-meter topobathymetric elevation model and elevation-area-volume tables for Bear Lake, Utah and Idaho, 2002-2018.xml",
+      "contentType": "application/fgdc+xml",
+      "size": 42771,
+      "downloadUri": "https://www.sciencebase.gov/catalog/file/get/698226f4b66b018d00102e42?f=fixture-metadata",
+      "checksum": {
+        "type": "MD5",
+        "value": "46df71316a02e2bf070f9626d34fd8e6"
+      }
+    }
+  ]
+}

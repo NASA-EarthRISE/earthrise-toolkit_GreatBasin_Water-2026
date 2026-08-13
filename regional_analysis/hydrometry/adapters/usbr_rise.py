@@ -104,7 +104,7 @@ class RiseObservation:
     location_id: int | None
     parameter_id: int | None
     timestamp_utc: datetime
-    value: float
+    value: float | None
     status: str | None
     source_code: str | None
     created_at: datetime | None
@@ -630,10 +630,13 @@ def parse_results_page(
                 f"item parameter {expected_item.parameter_id}."
             )
         value = attributes.get("result")
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
+        if value is None:
+            numeric_value = None
+        elif isinstance(value, bool) or not isinstance(value, (int, float)):
             raise RiseSchemaError(f"RISE result {result_id} value is not numeric.")
-        numeric_value = float(value)
-        if not math.isfinite(numeric_value):
+        else:
+            numeric_value = float(value)
+        if numeric_value is not None and not math.isfinite(numeric_value):
             raise RiseSchemaError(f"RISE result {result_id} value is not finite.")
         timestamp = _optional_datetime(attributes.get("dateTime"), "result dateTime")
         if timestamp is None:
@@ -913,7 +916,12 @@ class RiseAdapter(BaseAdapter):
                     raise RiseSchemaError(
                         f"RISE pagination returned {len(rows)} of {total} rows."
                     )
-                return tuple(rows)
+                timestamps = [row.timestamp_utc for row in rows]
+                if len(timestamps) != len(set(timestamps)):
+                    raise RiseSchemaError(
+                        f"RISE item {item.item_id} returned duplicate timestamps."
+                    )
+                return tuple(sorted(rows, key=lambda row: row.timestamp_utc))
         raise RiseError(f"RISE results exceeded configured maximum {max_pages} pages.")
 
     @staticmethod
@@ -991,4 +999,5 @@ class RiseAdapter(BaseAdapter):
                 },
             )
             for observation in observations
+            if observation.value is not None
         )

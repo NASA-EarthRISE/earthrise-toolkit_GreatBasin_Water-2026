@@ -1,5 +1,24 @@
 schema_version: hydrometry-pilots-v1
 
+# Pinned Phase 1 manager-product settings.  These dates are deliberate
+# reproducibility bounds; the workflow never substitutes the execution date.
+phase1:
+  history_start: "2016-01-01"
+  analysis_end: "2026-08-13"
+  change_windows_days:
+    - 7
+    - 30
+    - 90
+    - 365
+  baseline_match_tolerance_days: 3
+  seasonal_window_days: 15
+  seasonal_min_distinct_years: 5
+  seasonal_min_observations: 20
+  freshness_warning_days: 7
+  capacity_interpolation:
+    method: piecewise_linear
+    allow_extrapolation: false
+
 # Phase 0 research registry. Hylak_id identifies the lake polygon only; it is
 # never substituted for a provider record ID or a SWOT Prior Lake Database ID.
 profiles:
@@ -100,8 +119,9 @@ profiles:
     potential_capability_ceiling: 5
     potential_source_quality_class: B
     key_constraints:
-      - Potential Level 4 or 5 requires confirmation of both the USGS series and official product metadata.
-      - The level series and E-A-V product must share a documented vertical relationship.
+      - Phase 1 Class-B storage requires revalidation of both the USGS series and official E-A-V table on every run.
+      - The USGS level series and E-A-V table are both NAVD88; any unknown or mismatched datum blocks derivation.
+      - Derived area and storage are not observed values, and quantitative uncertainty is not yet available.
     swot:
       swot_pld_id: null
       hydrocron_status: requires_crosswalk
@@ -140,8 +160,8 @@ profiles:
     potential_capability_ceiling: 5
     potential_source_quality_class: B
     key_constraints:
-      - RISE record 2362 must be inventoried; individual time-series IDs are not preselected.
-      - Level 4 is blocked until operational stage or storage and its vertical relationship to the NAVD88 capacity product are documented.
+      - RISE record 2362 and configured items 508, 509, and 4784 must be rediscovered and identity-validated on every run.
+      - Validated agency total storage supports Level 4 directly; independent capacity-table recomputation remains blocked until the RISE elevation relationship to NAVD88 is documented.
     swot:
       swot_pld_id: null
       hydrocron_status: requires_crosswalk
@@ -160,6 +180,49 @@ profiles:
         metadata:
           selection_status: item_discovery_required
           storage_selection_rule: title_parameter_and_unit_must_clearly_match
+      - source_id: rise_lake_powell_elevation
+        provider: usbr_rise
+        priority: 20
+        source_record_id: "2362"
+        source_item_id: "508"
+        variable: reservoir_elevation
+        expected_unit: ft
+        expected_vertical_datum: null
+        expected_height_type: project_datum_elevation
+        role: daily_reservoir_elevation
+        required: true
+        metadata:
+          expected_title_contains: Reservoir Elevation
+          expected_update_frequency: daily
+      - source_id: rise_lake_powell_total_storage
+        provider: usbr_rise
+        priority: 30
+        source_record_id: "2362"
+        source_item_id: "509"
+        variable: storage
+        expected_unit: acre-feet
+        expected_vertical_datum: null
+        expected_height_type: unknown
+        role: daily_total_reservoir_storage
+        required: true
+        metadata:
+          expected_title_contains: Storage
+          expected_update_frequency: daily
+          confers_absolute_storage_capability: true
+      - source_id: rise_lake_powell_area
+        provider: usbr_rise
+        priority: 40
+        source_record_id: "2362"
+        source_item_id: "4784"
+        variable: surface_area
+        expected_unit: acres
+        expected_vertical_datum: null
+        expected_height_type: unknown
+        role: daily_surface_area
+        required: true
+        metadata:
+          expected_title_contains: Area
+          expected_update_frequency: daily
     bathymetry_sources:
       - catalog_id: usgs_lake_powell_topobathymetry
         provider: usgs_sciencebase
@@ -192,7 +255,7 @@ profiles:
     potential_source_quality_class: A
     key_constraints:
       - RISE item 4275 is bank storage, not total reservoir storage, and cannot by itself establish Level 4.
-      - A separately discovered total-storage series must be validated before direct-storage capability is reported.
+      - Configured total-storage item 337 must be rediscovered and identity-validated separately from bank storage on every run.
       - ACAP-derived storage remains a separate future validation path.
     swot:
       swot_pld_id: null
@@ -241,6 +304,21 @@ profiles:
         metadata:
           expected_title_contains: Area
           expected_update_frequency: daily
+      - source_id: rise_flaming_gorge_total_storage
+        provider: usbr_rise
+        priority: 40
+        source_record_id: "2300"
+        source_item_id: "337"
+        variable: storage
+        expected_unit: acre-feet
+        expected_vertical_datum: null
+        expected_height_type: unknown
+        role: daily_total_reservoir_storage
+        required: true
+        metadata:
+          expected_title_contains: Storage
+          expected_update_frequency: daily
+          confers_absolute_storage_capability: true
     bathymetry_sources:
       - catalog_id: rise_flaming_gorge_sedimentation_survey
         provider: usbr_rise

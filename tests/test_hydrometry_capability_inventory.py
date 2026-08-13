@@ -357,10 +357,17 @@ class CapabilityInventoryTests(unittest.TestCase):
                     "great_salt": 2,
                     "lake_abert": 2,
                     "bear_lake": 2,
-                    "lake_powell": 2,
+                    "lake_powell": 4,
                     "flaming_gorge": 4,
                 },
             )
+            powell = next(
+                record
+                for record in bundle.capability_records
+                if record.profile_id == "lake_powell"
+            )
+            self.assertTrue(powell.absolute_storage_available)
+            self.assertEqual(powell.source_quality_class.value, "A")
             paths = write_inventory_outputs(
                 bundle,
                 output_dir=root / "data",

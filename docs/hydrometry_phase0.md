@@ -149,9 +149,11 @@ and apply only to HTTP 429 and transient 5xx responses.
   and the official NAVD88 elevation-area-volume/topobathymetry metadata validate.
 - Flaming Gorge can reach current Level 4 only through a validated direct RISE
   storage item. Future storage recomputation from ACAP is a separate check.
-- Lake Powell record 2362 is an item-discovery starting point, not a license to
-  guess item IDs. Level 4 remains blocked until operational elevation/storage
-  items and their relationship to the NAVD88 capacity product are documented.
+- Lake Powell record 2362 was the discovery starting point; validated item 509
+  now establishes direct agency-reported Level-4 storage (Class A). The still
+  unresolved operational-elevation relationship to the NAVD88 capacity product
+  blocks only independent capacity-table recomputation and quantitative depth
+  modeling, not the reported storage series.
 
 ## Known limitations and next phase
 

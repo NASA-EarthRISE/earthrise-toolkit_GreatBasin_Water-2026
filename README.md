@@ -55,6 +55,10 @@ The research-only [Hydrometry Phase 0](docs/hydrometry_phase0.md) workflow
 inventories pilot lake-level, storage, SWOT/Hydrocron, and bathymetry
 capabilities without calculating volume or changing the QGIS plug-in.
 
+[Hydrometry Phase 1](docs/hydrometry_phase1.md) adds manager-oriented daily
+products, direct agency reservoir storage, and a bounded official-table Bear
+Lake storage derivation while keeping the QGIS plug-in unchanged.
+
 ## Project
 
 | Field        | Value                             |

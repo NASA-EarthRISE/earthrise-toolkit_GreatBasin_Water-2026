@@ -897,10 +897,11 @@ def _probe_rise_profile(
                         state.water_level_available = True
                     if item.variable is HydrometryVariable.STORAGE:
                         state.potential_direct_storage = True
-                        # Powell remains explicitly blocked pending a documented
-                        # operational/capacity vertical relationship. Flaming
-                        # Gorge direct agency total storage can establish L4.
-                        if profile.profile_id == "flaming_gorge":
+                        # Validated agency-reported *total* storage is an
+                        # independent Class-A Level-4 pathway. A separate
+                        # elevation/capacity datum relationship is required only
+                        # for future recomputation or 3D work.
+                        if profile.profile_id in {"lake_powell", "flaming_gorge"}:
                             state.direct_storage_available = True
                 else:
                     state.unverified_sources.add(source_id)
@@ -1206,13 +1207,16 @@ def _capability_record(
         missing.append("authoritative bathymetry or capacity relation")
     if profile.profile_id == "lake_powell":
         missing.append(
-            "documented RISE operational-stage/storage relationship to NAVD88 capacity"
+            "documented RISE elevation relationship to NAVD88 capacity for independent recomputation"
         )
     datum_status = "source datum retained; no normalization attempted"
     if profile.profile_id == "great_salt":
         datum_status = "blocked: NGVD29 gauges versus NAVD88 bathymetry"
     elif profile.profile_id == "lake_powell":
-        datum_status = "blocked: RISE item datum not linked to NAVD88 capacity"
+        datum_status = (
+            "direct total storage requires no height normalization; RISE elevation "
+            "and NAVD88 capacity relationship remains unresolved"
+        )
     elif profile.profile_id == "flaming_gorge" and state.direct_storage_available:
         datum_status = (
             "direct total storage requires no height normalization; RISE elevation "
