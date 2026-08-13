@@ -1,0 +1,64 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "gsl-daily-62614",
+      "geometry": {"type": "Point", "coordinates": [-112.211, 40.731]},
+      "properties": {
+        "monitoring_location_id": "USGS-10010000",
+        "parameter_code": "62614",
+        "parameter_name": "Lake or reservoir water surface elevation",
+        "parameter_description": "Lake or reservoir water surface elevation above NGVD 1929, feet",
+        "unit_of_measure": "ft",
+        "statistic_id": "00003",
+        "computation_identifier": "Mean",
+        "computation_period_identifier": "Daily",
+        "begin_utc": "2024-01-01T00:00:00Z",
+        "end_utc": "2026-08-12T00:00:00Z",
+        "primary": "Primary",
+        "web_description": null
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "gsl-continuous-62614",
+      "geometry": {"type": "Point", "coordinates": [-112.211, 40.731]},
+      "properties": {
+        "monitoring_location_id": "USGS-10010000",
+        "parameter_code": "62614",
+        "parameter_name": "Lake or reservoir water surface elevation",
+        "parameter_description": "Lake or reservoir water surface elevation above NGVD29, feet",
+        "unit_of_measure": "ft",
+        "statistic_id": null,
+        "computation_identifier": "Instantaneous",
+        "computation_period_identifier": "Points",
+        "begin": "2024-01-01T00:00:00",
+        "end": "2026-08-12T00:00:00",
+        "primary": "Primary",
+        "web_description": null
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "gsl-gage-height",
+      "geometry": {"type": "Point", "coordinates": [-112.211, 40.731]},
+      "properties": {
+        "monitoring_location_id": "USGS-10010000",
+        "parameter_code": "00065",
+        "parameter_name": "Gage height",
+        "parameter_description": "Gage height, feet",
+        "unit_of_measure": "ft",
+        "statistic_id": "00003",
+        "computation_identifier": "Mean",
+        "computation_period_identifier": "Daily",
+        "begin_utc": "2024-01-01T00:00:00Z",
+        "end_utc": "2026-08-12T00:00:00Z",
+        "primary": "Primary",
+        "web_description": null
+      }
+    }
+  ],
+  "numberReturned": 3,
+  "links": []
+}

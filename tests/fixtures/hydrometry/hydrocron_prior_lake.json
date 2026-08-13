@@ -1,0 +1,31 @@
+{
+  "status": "200 OK",
+  "hits": 1,
+  "results": {
+    "csv": "",
+    "geojson": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "id": "0",
+          "type": "Feature",
+          "properties": {
+            "lake_id": "2710046612",
+            "time_str": "2025-07-12T05:10:00Z",
+            "wse": "1280.42",
+            "wse_units": "m",
+            "area_total": "52.7",
+            "area_total_units": "km2",
+            "quality_f": "0",
+            "collection_shortname": "SWOT_L2_HR_LakeSP_D",
+            "collection_version": "D",
+            "crid": "Dx0000",
+            "PLD_version": "PriorLakeDb_v10",
+            "range_start_time": "2025-07-12T05:09:30Z"
+          },
+          "geometry": {"type": "Point", "coordinates": [-111.0, 41.0]}
+        }
+      ]
+    }
+  }
+}

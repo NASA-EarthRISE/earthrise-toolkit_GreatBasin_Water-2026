@@ -1,0 +1,23 @@
+{
+  "data": {
+    "id": "/rise/api/catalog-record/2300",
+    "type": "CatalogRecord",
+    "attributes": {
+      "_id": 2300,
+      "recordTitle": "Flaming Gorge Reservoir Dam and Powerplant Water Operations Monitoring Data from Upper Colorado Hydrologic Database",
+      "recordDescription": "Upper Colorado Region Water Operations Data for Flaming Gorge Reservoir.",
+      "generationEffort": "Upper Colorado Water Operations Monitoring",
+      "updateDate": "2024-08-26T15:29:47+00:00"
+    },
+    "relationships": {
+      "location": {"data": {"type": "Location", "id": "/rise/api/location/1535"}},
+      "catalogItems": {
+        "data": [
+          {"type": "CatalogItem", "id": "/rise/api/catalog-item/341"},
+          {"type": "CatalogItem", "id": "/rise/api/catalog-item/4275"},
+          {"type": "CatalogItem", "id": "/rise/api/catalog-item/4782"}
+        ]
+      }
+    }
+  }
+}

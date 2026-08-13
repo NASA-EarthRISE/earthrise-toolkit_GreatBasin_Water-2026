@@ -1,0 +1,17 @@
+{
+  "type": "Feature",
+  "id": "USGS-10010000",
+  "geometry": {
+    "type": "Point",
+    "coordinates": [-112.211, 40.731]
+  },
+  "properties": {
+    "monitoring_location_number": "10010000",
+    "monitoring_location_name": "GREAT SALT LAKE AT SALTAIR BOAT HARBOR, UT",
+    "site_type": "Lake, Reservoir, Impoundment",
+    "state_name": "Utah",
+    "altitude": 4200.0,
+    "vertical_datum": "NGVD29",
+    "vertical_datum_name": "National Geodetic Vertical Datum of 1929"
+  }
+}

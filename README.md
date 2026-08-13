@@ -51,6 +51,10 @@ The repository holds three deliverables:
 The plug-in is self-contained. It does not import the calibration scripts and
 runs without them.
 
+The research-only [Hydrometry Phase 0](docs/hydrometry_phase0.md) workflow
+inventories pilot lake-level, storage, SWOT/Hydrocron, and bathymetry
+capabilities without calculating volume or changing the QGIS plug-in.
+
 ## Project
 
 | Field        | Value                             |

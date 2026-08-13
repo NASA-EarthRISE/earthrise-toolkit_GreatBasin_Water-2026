@@ -1,0 +1,22 @@
+{
+  "links": {"next": "/rise/api/result?itemId=341&page=2"},
+  "meta": {"totalItems": 2, "itemsPerPage": 1, "currentPage": 1},
+  "data": [
+    {
+      "id": "/rise/api/result/9001",
+      "type": "Result",
+      "attributes": {
+        "_id": 9001,
+        "itemId": 341,
+        "locationId": 1535,
+        "sourceCode": "uchdb2",
+        "dateTime": "2026-08-01T07:00:00+00:00",
+        "result": 6023.1,
+        "status": null,
+        "parameterId": 2,
+        "createDate": "2026-08-02T12:00:00+00:00",
+        "updateDate": null
+      }
+    }
+  ]
+}

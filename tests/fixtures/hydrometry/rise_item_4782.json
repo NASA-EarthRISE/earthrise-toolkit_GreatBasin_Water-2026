@@ -1,0 +1,28 @@
+{
+  "data": {
+    "id": "/rise/api/catalog-item/4782",
+    "type": "CatalogItem",
+    "attributes": {
+      "_id": 4782,
+      "itemTitle": "Flaming Gorge Reservoir Dam and Powerplant Daily Lake/Reservoir Area-acres Time Series Data",
+      "itemDescription": "Daily instantaneous reservoir area.",
+      "disclaimer": "Data are provisional and subject to revision unless otherwise noted.",
+      "temporalStartDate": "1968-12-01T07:00:00+00:00",
+      "temporalEndDate": "2026-08-12T07:00:00+00:00",
+      "updateFrequency": {"updatefrequency": "daily"},
+      "updateDate": "2026-08-13T13:03:27+00:00",
+      "verticalDatum": null,
+      "dataStructure": "Time series",
+      "parameterGroup": "Lake/Reservoir Area",
+      "parameterId": 27,
+      "parameterName": "Lake/Reservoir Area",
+      "parameterUnit": "acres",
+      "parameterTimestep": "daily",
+      "parameterTransformation": "instant",
+      "binaryFilePath": null
+    },
+    "relationships": {
+      "catalogRecord": {"data": {"type": "CatalogRecord", "id": "/rise/api/catalog-record/2300"}}
+    }
+  }
+}

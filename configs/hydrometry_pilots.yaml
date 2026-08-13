@@ -1,0 +1,253 @@
+schema_version: hydrometry-pilots-v1
+
+# Phase 0 research registry. Hylak_id identifies the lake polygon only; it is
+# never substituted for a provider record ID or a SWOT Prior Lake Database ID.
+profiles:
+  - profile_id: great_salt
+    Hylak_id: 67
+    display_name: Great Salt
+    state: UT
+    role: Existing anchor; two-arm USGS level plus official topobathymetry
+    legacy_preset_name: Great Salt Lake, UT
+    potential_capability_ceiling: 5
+    potential_source_quality_class: C
+    key_constraints:
+      - North- and south-arm level series are distinct and are not interchangeable.
+      - Gauge elevations use NGVD29 while the official topobathymetry uses NAVD88.
+      - Absolute storage remains blocked until datum and arm handling are resolved.
+    swot:
+      swot_pld_id: null
+      hydrocron_status: requires_crosswalk
+    sources:
+      - source_id: usgs_great_salt_south_arm_level
+        provider: usgs_waterdata
+        priority: 10
+        source_record_id: USGS-10010000
+        source_item_id: null
+        variable: water_level
+        expected_unit: ft
+        expected_vertical_datum: NGVD29
+        expected_height_type: orthometric_height
+        role: independent_south_arm_water_level
+        required: true
+        metadata:
+          arm: south
+          interchangeable_with_other_arm: false
+          selection_status: discover_and_validate_series
+      - source_id: usgs_great_salt_north_arm_level
+        provider: usgs_waterdata
+        priority: 20
+        source_record_id: USGS-10010100
+        source_item_id: null
+        variable: water_level
+        expected_unit: ft
+        expected_vertical_datum: NGVD29
+        expected_height_type: orthometric_height
+        role: independent_north_arm_water_level
+        required: true
+        metadata:
+          arm: north
+          interchangeable_with_other_arm: false
+          selection_status: discover_and_validate_series
+    bathymetry_sources:
+      - catalog_id: usgs_great_salt_topobathymetry
+        provider: usgs_sciencebase
+        priority: 10
+        doi: 10.5066/P9DGG75W
+        source_record_id: null
+        product_type: topobathymetric_dem_and_elevation_area_volume
+        source_quality_candidate: C
+        metadata:
+          landing_url: https://doi.org/10.5066/P9DGG75W
+          verification_status: verify_landing_page_metadata
+
+  - profile_id: lake_abert
+    Hylak_id: 776
+    display_name: Lake Abert
+    state: OR
+    role: Existing anchor; short NAVD88 USGS level record
+    legacy_preset_name: Lake Abert, OR
+    potential_capability_ceiling: 3
+    potential_source_quality_class: E
+    key_constraints:
+      - No authoritative bathymetry or capacity relation is currently confirmed.
+      - HydroLAKES modeled volume and depth cannot establish absolute storage.
+    swot:
+      swot_pld_id: null
+      hydrocron_status: requires_crosswalk
+    sources:
+      - source_id: usgs_lake_abert_level
+        provider: usgs_waterdata
+        priority: 10
+        source_record_id: USGS-10387150
+        source_item_id: null
+        variable: water_level
+        expected_unit: ft
+        expected_vertical_datum: NAVD88
+        expected_height_type: orthometric_height
+        role: lake_water_level
+        required: true
+        metadata:
+          selection_status: discover_and_validate_series
+    bathymetry_sources: []
+
+  - profile_id: bear_lake
+    Hylak_id: 778
+    display_name: Bear Lake
+    state: UT
+    role: Natural lake with USGS level and official E-A-V/TBDEM
+    legacy_preset_name: null
+    potential_capability_ceiling: 5
+    potential_source_quality_class: B
+    key_constraints:
+      - Potential Level 4 or 5 requires confirmation of both the USGS series and official product metadata.
+      - The level series and E-A-V product must share a documented vertical relationship.
+    swot:
+      swot_pld_id: null
+      hydrocron_status: requires_crosswalk
+    sources:
+      - source_id: usgs_bear_lake_level
+        provider: usgs_waterdata
+        priority: 10
+        source_record_id: USGS-10055000
+        source_item_id: null
+        variable: water_level
+        expected_unit: ft
+        expected_vertical_datum: NAVD88
+        expected_height_type: orthometric_height
+        role: lake_water_level
+        required: true
+        metadata:
+          selection_status: discover_and_validate_series
+    bathymetry_sources:
+      - catalog_id: usgs_bear_lake_eav_tbdem
+        provider: usgs_sciencebase
+        priority: 10
+        doi: 10.5066/P14KZS2D
+        source_record_id: null
+        product_type: elevation_area_volume_and_topobathymetric_dem
+        source_quality_candidate: B
+        metadata:
+          landing_url: https://doi.org/10.5066/P14KZS2D
+          verification_status: verify_landing_page_metadata
+
+  - profile_id: lake_powell
+    Hylak_id: 802
+    display_name: Lake Powell
+    state: UT
+    role: Reservoir with RISE operations and official E-A-capacity/TBDEM
+    legacy_preset_name: null
+    potential_capability_ceiling: 5
+    potential_source_quality_class: B
+    key_constraints:
+      - RISE record 2362 must be inventoried; individual time-series IDs are not preselected.
+      - Level 4 is blocked until operational stage or storage and its vertical relationship to the NAVD88 capacity product are documented.
+    swot:
+      swot_pld_id: null
+      hydrocron_status: requires_crosswalk
+    sources:
+      - source_id: rise_lake_powell_item_inventory
+        provider: usbr_rise
+        priority: 10
+        source_record_id: "2362"
+        source_item_id: null
+        variable: source_inventory
+        expected_unit: null
+        expected_vertical_datum: null
+        expected_height_type: unknown
+        role: discover_elevation_area_and_storage_items_without_guessing
+        required: true
+        metadata:
+          selection_status: item_discovery_required
+          storage_selection_rule: title_parameter_and_unit_must_clearly_match
+    bathymetry_sources:
+      - catalog_id: usgs_lake_powell_topobathymetry
+        provider: usgs_sciencebase
+        priority: 10
+        doi: 10.5066/P9XX0J1Y
+        source_record_id: null
+        product_type: topobathymetric_dem
+        source_quality_candidate: C
+        metadata:
+          landing_url: https://doi.org/10.5066/P9XX0J1Y
+          verification_status: verify_landing_page_metadata
+      - catalog_id: usgs_lake_powell_capacity_table
+        provider: usgs_sciencebase
+        priority: 20
+        doi: 10.5066/P9O3IPG3
+        source_record_id: null
+        product_type: elevation_area_capacity_table
+        source_quality_candidate: B
+        metadata:
+          landing_url: https://doi.org/10.5066/P9O3IPG3
+          verification_status: verify_landing_page_metadata
+
+  - profile_id: flaming_gorge
+    Hylak_id: 784
+    display_name: Flaming Gorge
+    state: WY
+    role: Reservoir with RISE elevation, area, bank-storage metadata, discoverable total storage, and ACAP survey
+    legacy_preset_name: null
+    potential_capability_ceiling: 4
+    potential_source_quality_class: A
+    key_constraints:
+      - RISE item 4275 is bank storage, not total reservoir storage, and cannot by itself establish Level 4.
+      - A separately discovered total-storage series must be validated before direct-storage capability is reported.
+      - ACAP-derived storage remains a separate future validation path.
+    swot:
+      swot_pld_id: null
+      hydrocron_status: requires_crosswalk
+    sources:
+      - source_id: rise_flaming_gorge_elevation
+        provider: usbr_rise
+        priority: 10
+        source_record_id: "2300"
+        source_item_id: "341"
+        variable: reservoir_elevation
+        expected_unit: ft
+        expected_vertical_datum: null
+        expected_height_type: project_datum_elevation
+        role: daily_reservoir_elevation
+        required: true
+        metadata:
+          expected_title_contains: Reservoir Elevation
+          expected_update_frequency: daily
+      - source_id: rise_flaming_gorge_bank_storage
+        provider: usbr_rise
+        priority: 20
+        source_record_id: "2300"
+        source_item_id: "4275"
+        variable: bank_storage
+        expected_unit: acre-feet
+        expected_vertical_datum: null
+        expected_height_type: unknown
+        role: daily_bank_storage_not_total_storage
+        required: true
+        metadata:
+          expected_title_contains: Bank Storage
+          expected_update_frequency: daily
+          confers_absolute_storage_capability: false
+      - source_id: rise_flaming_gorge_area
+        provider: usbr_rise
+        priority: 30
+        source_record_id: "2300"
+        source_item_id: "4782"
+        variable: surface_area
+        expected_unit: acres
+        expected_vertical_datum: null
+        expected_height_type: unknown
+        role: daily_surface_area
+        required: true
+        metadata:
+          expected_title_contains: Area
+          expected_update_frequency: daily
+    bathymetry_sources:
+      - catalog_id: rise_flaming_gorge_sedimentation_survey
+        provider: usbr_rise
+        priority: 10
+        doi: null
+        source_record_id: "8065"
+        product_type: sedimentation_survey_acap_metadata
+        source_quality_candidate: B
+        metadata:
+          verification_status: metadata_only_no_file_download

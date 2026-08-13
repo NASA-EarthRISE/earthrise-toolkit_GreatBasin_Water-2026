@@ -1,0 +1,28 @@
+{
+  "data": {
+    "id": "/rise/api/location/1535",
+    "type": "Location",
+    "attributes": {
+      "_id": 1535,
+      "locationName": "Flaming Gorge Reservoir Dam and Powerplant",
+      "locationCoordinates": {"type": "Point", "coordinates": [-109.57304, 40.97789]},
+      "horizontalDatum": {"_id": "WGS84"},
+      "verticalDatum": {"_id": "EGM96"},
+      "locationTypeName": "Lake/Reservoir"
+    },
+    "relationships": {
+      "states": {
+        "data": [
+          {"type": "State", "id": "/rise/api/state/UT"},
+          {"type": "State", "id": "/rise/api/state/WY"}
+        ]
+      },
+      "catalogRecords": {
+        "data": [
+          {"type": "CatalogRecord", "id": "/rise/api/catalog-record/2300"},
+          {"type": "CatalogRecord", "id": "/rise/api/catalog-record/8065"}
+        ]
+      }
+    }
+  }
+}
