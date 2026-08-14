@@ -33,7 +33,12 @@
       "name": "Bear_Lake_TBDEM_2026_50cm.zip",
       "contentType": "application/zip",
       "size": 1339051329,
-      "downloadUri": "https://sciencebase.usgs.gov/manager/download/fixture-raster"
+      "cuid": "cmla2h2m7009d0uob0liecbur",
+      "pathOnDisk": "__s3__",
+      "bucket": "prod-is-usgs-sb-prod-content",
+      "key": "698226f4b66b018d00102e42/Bear_Lake_TBDEM_2026_50cm.zip",
+      "downloadUri": "https://sciencebase.usgs.gov/manager/download/fixture-raster",
+      "s3DownloadRequestPageUri": "https://www.sciencebase.gov/catalog/item/requestDownload/698226f4b66b018d00102e42?filePath=__s3__"
     },
     {
       "name": "Bear_Lake_TBDEM_2026_ElevAreaVolume.csv",

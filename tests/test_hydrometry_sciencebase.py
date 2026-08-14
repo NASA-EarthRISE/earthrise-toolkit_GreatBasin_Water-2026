@@ -22,6 +22,7 @@ from regional_analysis.hydrometry.sciencebase import (
     BEAR_LAKE_TITLE,
     SCIENCEBASE_ITEMS_URL,
     ScienceBaseContentError,
+    ScienceBaseDownloadMode,
     ScienceBaseFileSelectionError,
     ScienceBaseIdentityError,
     acquire_bear_lake_eav,
@@ -91,6 +92,41 @@ class ScienceBaseParsingTests(unittest.TestCase):
         self.assertEqual(item.publication_date, "2026-03-31")
         self.assertEqual(item.source_version, "2026-03-31")
         self.assertEqual(len(item.files), 3)
+
+        raster = item.files[0]
+        self.assertEqual(raster.cuid, "cmla2h2m7009d0uob0liecbur")
+        self.assertEqual(raster.path_on_disk, "__s3__")
+        self.assertEqual(raster.storage_bucket, "prod-is-usgs-sb-prod-content")
+        self.assertEqual(
+            raster.storage_key,
+            "698226f4b66b018d00102e42/Bear_Lake_TBDEM_2026_50cm.zip",
+        )
+        self.assertEqual(
+            raster.s3_download_request_page_url,
+            "https://www.sciencebase.gov/catalog/item/requestDownload/"
+            "698226f4b66b018d00102e42?filePath=__s3__",
+        )
+        self.assertEqual(
+            raster.download_mode,
+            ScienceBaseDownloadMode.CATALOG_FILE_PROXY,
+        )
+        self.assertTrue(raster.requires_catalog_file_proxy)
+
+        eav = item.files[1]
+        self.assertEqual(eav.download_mode, ScienceBaseDownloadMode.DIRECT)
+        self.assertFalse(eav.requires_catalog_file_proxy)
+
+    def test_invalid_large_file_request_page_is_rejected(self) -> None:
+        payload = dict(self.item_payload)
+        files = [dict(entry) for entry in self.item_payload["files"]]
+        files[0]["s3DownloadRequestPageUri"] = "https://example.test/request"
+        payload["files"] = files
+        with self.assertRaises(ScienceBaseIdentityError):
+            parse_sciencebase_item(
+                payload,
+                expected_doi=BEAR_LAKE_DOI,
+                expected_title=BEAR_LAKE_TITLE,
+            )
 
     def test_wrong_title_or_nonofficial_item_url_fails(self) -> None:
         wrong = dict(self.search)

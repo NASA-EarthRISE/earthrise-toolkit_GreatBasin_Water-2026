@@ -37,7 +37,9 @@ SECRET_KEY_PARTS = (
     "credential",
     "password",
     "secret",
+    "signature",
     "token",
+    "x_amz",
 )
 
 

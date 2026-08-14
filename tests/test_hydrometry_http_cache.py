@@ -87,11 +87,18 @@ class HttpClientTests(unittest.TestCase):
 
     def test_public_url_removes_credentials(self) -> None:
         url = public_url(
-            "https://example.test/items?token=hidden&f=json",
-            {"api_key": "hidden", "site": "123"},
+            "https://example.test/items?token=hidden&f=json&"
+            "X-Amz-Signature=signed-secret&X-Amz-Date=20260813T000000Z",
+            {
+                "api_key": "hidden",
+                "site": "123",
+                "x-amz-credential": "credential-secret",
+            },
         )
         self.assertEqual(url, "https://example.test/items?f=json&site=123")
         self.assertNotIn("hidden", url)
+        self.assertNotIn("signed-secret", url)
+        self.assertNotIn("credential-secret", url)
 
 
 class CacheStoreTests(unittest.TestCase):

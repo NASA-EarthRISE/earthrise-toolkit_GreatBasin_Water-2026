@@ -20,6 +20,7 @@ import zipfile
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC
+from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import urlsplit
@@ -90,6 +91,13 @@ class ScienceBaseContentError(ScienceBaseError):
     """Raised when downloaded bytes fail type, length, hash, or CSV checks."""
 
 
+class ScienceBaseDownloadMode(str, Enum):
+    """How ScienceBase exposes bytes for one advertised file."""
+
+    DIRECT = "direct"
+    CATALOG_FILE_PROXY = "catalog_file_proxy"
+
+
 @dataclass(frozen=True, slots=True)
 class DoiMetadata:
     """Small normalized DOI citation record."""
@@ -110,6 +118,35 @@ class ScienceBaseFile:
     download_url: str
     checksum_algorithm: str | None
     checksum_value: str | None
+    cuid: str | None = None
+    path_on_disk: str | None = None
+    s3_download_request_page_url: str | None = None
+    storage_bucket: str | None = None
+    storage_key: str | None = None
+
+    @property
+    def download_mode(self) -> ScienceBaseDownloadMode:
+        """Classify direct bytes versus the named Catalog file proxy."""
+
+        parts = urlsplit(self.download_url)
+        manager_route = (
+            parts.hostname or ""
+        ).casefold() == "sciencebase.usgs.gov" and parts.path.startswith(
+            "/manager/download/"
+        )
+        if (
+            manager_route
+            or self.path_on_disk == "__s3__"
+            or self.s3_download_request_page_url is not None
+        ):
+            return ScienceBaseDownloadMode.CATALOG_FILE_PROXY
+        return ScienceBaseDownloadMode.DIRECT
+
+    @property
+    def requires_catalog_file_proxy(self) -> bool:
+        """Return whether bytes should use the item-and-name Catalog service."""
+
+        return self.download_mode is ScienceBaseDownloadMode.CATALOG_FILE_PROXY
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,6 +317,14 @@ def _require_official_url(value: Any, label: str) -> str:
     return url
 
 
+def _optional_text(value: Any, label: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ScienceBaseSchemaError(f"{label} must be a non-empty string when set.")
+    return value.strip()
+
+
 def parse_sciencebase_search(
     payload: Mapping[str, Any],
     *,
@@ -365,6 +410,16 @@ def _parse_file(raw: Mapping[str, Any]) -> ScienceBaseFile:
     download_url = _require_official_url(
         raw.get("downloadUri") or raw.get("url"), f"file {name!r} download"
     )
+    cuid = _optional_text(raw.get("cuid"), f"file {name!r} cuid")
+    path_on_disk = _optional_text(raw.get("pathOnDisk"), f"file {name!r} pathOnDisk")
+    storage_bucket = _optional_text(raw.get("bucket"), f"file {name!r} bucket")
+    storage_key = _optional_text(raw.get("key"), f"file {name!r} key")
+    request_page_raw = raw.get("s3DownloadRequestPageUri")
+    request_page_url = (
+        _require_official_url(request_page_raw, f"file {name!r} S3 request page")
+        if request_page_raw is not None
+        else None
+    )
     try:
         size = int(raw.get("size"))
     except (TypeError, ValueError) as exc:
@@ -389,6 +444,11 @@ def _parse_file(raw: Mapping[str, Any]) -> ScienceBaseFile:
         download_url=download_url,
         checksum_algorithm=algorithm,
         checksum_value=value,
+        cuid=cuid,
+        path_on_disk=path_on_disk,
+        s3_download_request_page_url=request_page_url,
+        storage_bucket=storage_bucket,
+        storage_key=storage_key,
     )
 
 
@@ -1019,6 +1079,7 @@ __all__ = [
     "DoiMetadata",
     "ParsedBearLakeEav",
     "ScienceBaseContentError",
+    "ScienceBaseDownloadMode",
     "ScienceBaseError",
     "ScienceBaseFile",
     "ScienceBaseFileSelectionError",

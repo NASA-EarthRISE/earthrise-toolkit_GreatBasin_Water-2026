@@ -59,6 +59,11 @@ capabilities without calculating volume or changing the QGIS plug-in.
 products, direct agency reservoir storage, and a bounded official-table Bear
 Lake storage derivation while keeping the QGIS plug-in unchanged.
 
+[Hydrometry Phase 2](docs/hydrometry_phase2.md) documents the validation-gated
+Bear Lake surveyed-topobathymetry prototype. The companion
+[QGIS layer guide](docs/hydrometry_phase2_qgis_layers.md) covers manual loading
+of its depth, inundation, shoreline, change, and 3D products.
+
 ## Project
 
 | Field        | Value                             |

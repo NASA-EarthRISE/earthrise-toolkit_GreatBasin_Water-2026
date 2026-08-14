@@ -19,6 +19,43 @@ phase1:
     method: piecewise_linear
     allow_extrapolation: false
 
+# Bear Lake-only Phase 2 quantitative topobathymetry prototype. Source file
+# identities remain configuration, not implicit filename guesses in code.
+phase2:
+  bear_lake:
+    profile_id: bear_lake
+    sciencebase_item_id: "698226f4b66b018d00102e42"
+    raster_archive_name: Bear_Lake_TBDEM_2026_50cm.zip
+    spatial_metadata_archive_name: Bear_Lake_TBDEM_2026_Spatial_Metadata.zip
+    fgdc_metadata_name: Half-meter topobathymetric elevation model and elevation-area-volume tables for Bear Lake, Utah and Idaho, 2002-2018.xml
+    thumbnail_name: Bear_Lake_TBDEM_2026_thumbnail.png
+    candidate_spatial_resolutions_m:
+      - 5
+      - 10
+      - 30
+    validation_grid_steps: 150
+    connectivity: 8
+    selected_state_count: 5
+    animation_frame_count: 18
+    trusted_seed:
+      crs: EPSG:4326
+      longitude: -111.3321022385
+      latitude: 41.9843783855
+      description: Curated interior seed at the official ScienceBase representational point; must be numerically verified in the source raster.
+    resampling:
+      quantitative: average
+      comparison: bilinear
+      # Quantitative cells require complete source coverage; partial cells may
+      # be used only on the separate rendering grid.
+      minimum_valid_fraction: 1.0
+      rendering_resolution_m: 60
+    interactive_html:
+      enabled: true
+      maximum_file_size_mb: 50
+    outputs:
+      data_dir: data/hydrometry/phase2/bear_lake
+      figure_dir: outputs/hydrometry_phase2/bear_lake
+
 # Phase 0 research registry. Hylak_id identifies the lake polygon only; it is
 # never substituted for a provider record ID or a SWOT Prior Lake Database ID.
 profiles:
