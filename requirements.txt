@@ -55,6 +55,7 @@ stackstac
 odc-stac
 eo-learn
 earthengine-api
+earthaccess
 geemap
 wxee
 planetary-computer

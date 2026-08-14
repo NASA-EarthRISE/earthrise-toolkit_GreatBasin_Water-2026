@@ -132,12 +132,31 @@ live outside the repository and are located by environment variable:
 See [`data/README.md`](data/README.md) for what belongs there and why it stays
 out of version control.
 
-**NASA Earthdata.** `final_threshold_optimization.py` streams OPERA DSWx-HLS
-granules through `earthaccess`, which authenticates from `~/.netrc`:
+**NASA Earthdata.** `final_threshold_optimization.py` downloads and caches the
+OPERA DSWx-HLS layers it needs through `earthaccess`. A free Earthdata Login
+account is required to read uncached granules. When authentication is needed,
+`earthaccess` tries credentials in this order:
+`EARTHDATA_TOKEN` (or `EARTHDATA_USERNAME` and `EARTHDATA_PASSWORD`), a netrc
+file, and finally an interactive username/password prompt.
+
+The default credential file is `~/.netrc` on macOS/Linux and
+`%USERPROFILE%\_netrc` on Windows (or the file named by `NETRC`). Its contents
+are:
 
 ```
 machine urs.earthdata.nasa.gov login YOUR_USERNAME password YOUR_PASSWORD
 ```
+
+Netrc credentials are stored as plain text. On a trusted machine, `earthaccess`
+can create the platform-appropriate file interactively:
+
+```bash
+python -c "import earthaccess; earthaccess.login(strategy='interactive', persist=True)"
+```
+
+The script caches only the OPERA `B01_WTR` layers it actually reads under
+`outputs/cache/opera_b01/`. Interrupted runs reuse complete cached downloads;
+the entire `outputs/` tree is ignored by Git.
 
 **QGIS.** The tutorial and plug-in were developed using QGIS 3.44 LTR, available
 at https://www.qgis.org/download/. Older versions are in the "Archive" section of
@@ -272,6 +291,7 @@ Behaviour is controlled by flags at the top of the file:
 |------|---------|--------|
 | `RUN_OPTIMIZATION` | `False` | `True` re-samples and re-fits. `False` runs a figures-only pass that reads thresholds from `THRESHOLD_SOURCE_CSV`. |
 | `RUN_RESIDUAL_MAPS` | `True` | Residual maps and confusion matrices against OPERA and Dynamic World. |
+| `RUN_ASSEMBLED_FIGURE` | `True` | Adds a paper-ready two-site plate containing the true-color views, both residual maps, and both confusion matrices. Requires `RUN_RESIDUAL_MAPS=True`. |
 | `RUN_TIMESERIES` | `False` | Roughly 500 monthly composites, so it is slow. |
 | `RUN_EPOCH_CUTS` | `True` | Re-fits per 5-year epoch and within the OLI era, to test threshold drift. |
 
@@ -280,11 +300,14 @@ Outputs land under `outputs/`:
 ```
 outputs/
 ├── tables/     final_threshold_summary.csv, threshold_epochs.csv, roc_points.csv
-└── figures/    roc/  residual_maps/  confusion_matrices/  threshold_drift/  timeseries/
+└── figures/    roc/  residual_maps/  confusion_matrices/  assembled/  threshold_drift/  timeseries/
 ```
 
 Every figure is written as both PNG and SVG, and each folder carries a `no_text/`
 twin with all labels stripped, for annotation in Illustrator or Canva.
+The assembled plate is rendered on a fixed 7.5 x 4.1 inch canvas at 300 dpi, so
+its labeled and text-free PNGs align exactly when overlaid. It also emits 115%,
+125%, and 135% Garamond text-size alternatives on the same fixed layout.
 
 > A figures-only pass (`RUN_OPTIMIZATION = False`) cannot redraw the ROC curves
 > unless `outputs/tables/roc_points.csv` exists. The per-point test scores live
