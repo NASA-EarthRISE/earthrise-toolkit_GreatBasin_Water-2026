@@ -110,16 +110,22 @@ Google Earth Engine Code Editor at https://code.earthengine.google.com/, click
 the user icon in the upper-right corner, and select "Register a new Cloud
 Project". Cloud Project names cannot be changed later.
 
-The scripts call `ee.Authenticate()` on first run and read the project ID from
-the `EE_PROJECT` environment variable, so no identifier is stored in the
-repository:
+`final_threshold_optimization.py` reads existing Earth Engine credentials and
+the project ID from the `EE_PROJECT` environment variable, so no identifier is
+stored in the repository. It deliberately does not launch browser
+authentication, which can be blocked by managed browser or organizational
+security policies. Authenticate once outside the script, then set the project
+ID:
 
 ```bash
+earthengine authenticate
 export EE_PROJECT=your-ee-project-id
 ```
 
-If the variable is unset, the scripts fall back to the literal
-`your-ee-project-id` and fail at `ee.Initialize()`.
+Application Default Credentials are also accepted by the Earth Engine client.
+If credentials are missing, the script fails with instructions instead of
+opening a browser. If `EE_PROJECT` is unset, it falls back to the literal
+`your-ee-project-id` and fails clearly during initialization.
 
 **Local data.** No machine-specific paths are baked into the source. Two inputs
 live outside the repository and are located by environment variable:
@@ -158,6 +164,13 @@ The script caches only the OPERA `B01_WTR` layers it actually reads under
 `outputs/cache/opera_b01/`. Interrupted runs reuse complete cached downloads;
 the entire `outputs/` tree is ignored by Git.
 
+**Paper font.** The assembled residual figure uses Garamond and checks that the
+font is installed before downloading imagery. The font is not redistributed by
+this repository. Install a licensed Garamond font and restart Python before
+running with `RUN_ASSEMBLED_FIGURE=True`. The PNG preserves the rendered
+appearance; an editable SVG also requires Garamond on the machine opening it or
+the SVG viewer may substitute and reflow the text.
+
 **QGIS.** The tutorial and plug-in were developed using QGIS 3.44 LTR, available
 at https://www.qgis.org/download/. Older versions are in the "Archive" section of
 that page.
@@ -173,7 +186,7 @@ of two committed tables:
 
 | Shipped default | Table | Producer |
 |-----------------|-------|----------|
-| NDWI, NDVI (all four values) | `data/final_threshold_summary.csv` | `final_threshold_optimization.py` |
+| NDWI, NDVI (all four values) | `data/threshold_cv_summary.csv` | legacy `threshold_optimization_cv.py` calibration |
 | NDMI (both values) | `data/ndmi_threshold_cv_all.csv` | `threshold_optimization_ndmi.py` |
 
 ### Which script owns which index
@@ -294,6 +307,12 @@ Behaviour is controlled by flags at the top of the file:
 | `RUN_ASSEMBLED_FIGURE` | `True` | Adds a paper-ready two-site plate containing the true-color views, both residual maps, and both confusion matrices. Requires `RUN_RESIDUAL_MAPS=True`. |
 | `RUN_TIMESERIES` | `False` | Roughly 500 monthly composites, so it is slow. |
 | `RUN_EPOCH_CUTS` | `True` | Re-fits per 5-year epoch and within the OLI era, to test threshold drift. |
+
+Figures-only runs intentionally default to the committed published calibration
+in `data/threshold_cv_summary.csv`, which supplies the plug-in and paper values.
+To redraw with a newer fit produced by this script, set `THRESHOLD_SOURCE_CSV`
+to `final_threshold_summary.csv`; the different calibration will change the
+residual maps and confusion matrices.
 
 Outputs land under `outputs/`:
 

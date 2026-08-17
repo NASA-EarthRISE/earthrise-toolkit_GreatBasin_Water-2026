@@ -56,14 +56,34 @@ from collections import defaultdict
 from pathlib import Path
 from urllib.parse import urlsplit
 
-# This script uses the GDAL/PROJ libraries bundled with Rasterio and PyProj.
-# Machine-wide overrides from another GIS installation can make those libraries
-# load an incompatible proj.db or binary driver. Removing the overrides here is
-# process-local and lets each Python package select its matching bundled data.
-for _geo_env_var in ('PROJ_DATA', 'PROJ_LIB', 'GDAL_DATA',
-                     'GDAL_DRIVER_PATH', 'OGR_DRIVER_PATH'):
-    os.environ.pop(_geo_env_var, None)
-del _geo_env_var
+# A TauDEM runtime can add its own older GDAL/PROJ data, driver, and DLL
+# directories to the machine environment. Those paths are incompatible with
+# newer Rasterio wheels, but valid conda/system GIS paths must be preserved.
+# Filter only TauDEM entries, before importing any binary GIS package; failed
+# imports cannot be safely repaired afterward.
+def _remove_taudem_geo_paths():
+    names = ('PROJ_DATA', 'PROJ_LIB', 'GDAL_DATA',
+             'GDAL_DRIVER_PATH', 'OGR_DRIVER_PATH', 'PATH')
+    for name in names:
+        raw = os.environ.get(name)
+        if not raw:
+            continue
+        entries = [entry for entry in raw.split(os.pathsep) if entry]
+        kept = [
+            entry for entry in entries
+            if not any(part.casefold().startswith('taudem')
+                       for part in Path(entry.strip().strip('"')).parts)
+        ]
+        if len(kept) == len(entries):
+            continue
+        if kept:
+            os.environ[name] = os.pathsep.join(kept)
+        else:
+            os.environ.pop(name, None)
+
+
+_remove_taudem_geo_paths()
+del _remove_taudem_geo_paths
 
 import ee
 import earthaccess
@@ -78,6 +98,7 @@ from rasterio.warp import reproject, Resampling, transform_bounds
 from pyproj import Transformer
 from shapely.geometry import box, mapping
 import matplotlib.pyplot as plt
+from matplotlib import font_manager
 from matplotlib.colors import ListedColormap, BoundaryNorm
 from matplotlib.patches import Patch, FancyArrowPatch
 from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score
@@ -126,8 +147,23 @@ SENSOR_WINDOWS = {
 #     export EE_PROJECT=your-ee-project-id
 EE_PROJECT = os.environ.get('EE_PROJECT', 'your-ee-project-id')
 
-#ee.Authenticate()
-ee.Initialize(project=EE_PROJECT)
+def _initialize_earth_engine():
+    """Initialize from existing credentials without launching a browser."""
+    try:
+        ee.Initialize(project=EE_PROJECT)
+    except ee.EEException as exc:
+        if 'Please authorize access' not in str(exc):
+            raise
+        raise RuntimeError(
+            "Earth Engine credentials are unavailable. Authenticate outside "
+            "this script (for example, run 'earthengine authenticate' in a "
+            "terminal), then rerun. Automatic browser authentication is "
+            "intentionally disabled."
+        ) from exc
+
+
+_initialize_earth_engine()
+del _initialize_earth_engine
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -193,22 +229,16 @@ RUN_TIMESERIES    = False   # ~511 months; enable once the table looks right
 
 ASSEMBLED_FIGSIZE = (7.5, 4.1)  # full-width paper figure, matching the reference aspect
 ASSEMBLED_DPI     = 300
+ASSEMBLED_FONT_FAMILY = 'Garamond'
 ASSEMBLED_TEXT_SCALES = (1.15, 1.25, 1.35)  # fixed-layout comparison versions
 
-# Which table the figures-only pass (RUN_OPTIMIZATION=False) reads its thresholds
-# from. A bare filename resolves inside outputs/tables/; an absolute path is used
-# as given.
-#
-# This defaults to this script's own output so that both modes agree. A full run
-# draws its residual maps from the thresholds it just fitted, and a figures-only
-# pass redraws them from the table those same thresholds were written to, so the
-# two produce the same figures.
-#
-# Point it at SCRIPT_DIR / 'data' / 'threshold_cv_summary.csv' to redraw against
-# the published calibration instead, which is a different fit and will move the
-# residual maps. Any CSV with site / index / reference / threshold_mean columns
-# works.
-THRESHOLD_SOURCE_CSV = SCRIPT_DIR /"data"/'threshold_cv_summary.csv'
+# Figures-only runs intentionally default to the committed published calibration
+# used by the plug-in defaults and paper figures. This legacy fit differs from a
+# fresh RUN_OPTIMIZATION=True result. To redraw from this script's latest fitted
+# table, set this to 'final_threshold_summary.csv'; a bare filename resolves under
+# outputs/tables/, while an absolute path is used as given. Any CSV with
+# site / index / reference / threshold_mean columns works.
+THRESHOLD_SOURCE_CSV = SCRIPT_DIR / 'data' / 'threshold_cv_summary.csv'
 
 # Epoch cuts — how the optimal threshold has drifted, so a recommendation can be
 # based on recent data rather than a 40-year average.
@@ -359,6 +389,19 @@ def _ensure_earthaccess():
 
 
 # ═══════════════════════ figure helper ═══════════════════════
+
+def _require_assembled_font():
+    """Fail clearly instead of silently substituting another paper font."""
+    properties = font_manager.FontProperties(family=[ASSEMBLED_FONT_FAMILY])
+    try:
+        return font_manager.findfont(properties, fallback_to_default=False)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"The assembled figure requires {ASSEMBLED_FONT_FAMILY}, but "
+            "Matplotlib cannot find it. Install a licensed copy of the font, "
+            "restart Python, and rerun; no substitute font will be used."
+        ) from exc
+
 
 def _save_textless_copy(fig, out_path, dpi=150, bbox_inches='tight'):
     """Save a second copy of `fig` with every character removed — titles, axis
@@ -1456,9 +1499,10 @@ def _plot_confusion_compact(ax, resid_arr, pos_label, text_scale=1.0):
         spine.set_visible(False)
 
 
-@plt.rc_context({'font.family': 'Garamond'})
+@plt.rc_context({'font.family': ASSEMBLED_FONT_FAMILY})
 def plot_assembled_residual_figure(results, out_path, text_scale=1.0):
     """Paper-ready two-site plate matching the reference 2 x 5 assembly."""
+    _require_assembled_font()
     if len(results) != len(AOIS):
         raise ValueError('The assembled figure requires one result for every AOI.')
 
@@ -2043,6 +2087,10 @@ if __name__ == '__main__':
             print(f"[optional {_rel(ep_csv)} not found — skipping threshold-drift redraw]")
 
     if RUN_RESIDUAL_MAPS:
+        if RUN_ASSEMBLED_FIGURE:
+            # Check before the two-site network/download pass so another machine
+            # never spends minutes fetching data only to discover the font is absent.
+            _require_assembled_font()
         residual_failures = []
         residual_results = {}
         for site in AOIS:

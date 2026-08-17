@@ -207,6 +207,9 @@ eo-learn        MIT                 Earth observation ML pipelines. Permissive.
 earthengine-api Apache-2.0          Google Earth Engine Python API. Free to
                                     use. Requires GEE account/authorization.
 
+earthaccess     MIT                 NASA Earthdata search and download client.
+                                    Fully permissive.
+
 geemap          MIT                 Interactive GEE mapping. Fully permissive.
 
 wxee            MIT                 xarray interface for GEE. Permissive.
