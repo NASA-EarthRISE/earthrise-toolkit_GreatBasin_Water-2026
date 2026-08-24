@@ -110,16 +110,22 @@ Google Earth Engine Code Editor at https://code.earthengine.google.com/, click
 the user icon in the upper-right corner, and select "Register a new Cloud
 Project". Cloud Project names cannot be changed later.
 
-The scripts call `ee.Authenticate()` on first run and read the project ID from
-the `EE_PROJECT` environment variable, so no identifier is stored in the
-repository:
+`final_threshold_optimization.py` reads existing Earth Engine credentials and
+the project ID from the `EE_PROJECT` environment variable, so no identifier is
+stored in the repository. It deliberately does not launch browser
+authentication, which can be blocked by managed browser or organizational
+security policies. Authenticate once outside the script, then set the project
+ID:
 
 ```bash
+earthengine authenticate
 export EE_PROJECT=your-ee-project-id
 ```
 
-If the variable is unset, the scripts fall back to the literal
-`your-ee-project-id` and fail at `ee.Initialize()`.
+Application Default Credentials are also accepted by the Earth Engine client.
+If credentials are missing, the script fails with instructions instead of
+opening a browser. If `EE_PROJECT` is unset, it falls back to the literal
+`your-ee-project-id` and fails clearly during initialization.
 
 **Local data.** No machine-specific paths are baked into the source. Two inputs
 live outside the repository and are located by environment variable:
@@ -132,12 +138,38 @@ live outside the repository and are located by environment variable:
 See [`data/README.md`](data/README.md) for what belongs there and why it stays
 out of version control.
 
-**NASA Earthdata.** `final_threshold_optimization.py` streams OPERA DSWx-HLS
-granules through `earthaccess`, which authenticates from `~/.netrc`:
+**NASA Earthdata.** `final_threshold_optimization.py` downloads and caches the
+OPERA DSWx-HLS layers it needs through `earthaccess`. A free Earthdata Login
+account is required to read uncached granules. When authentication is needed,
+`earthaccess` tries credentials in this order:
+`EARTHDATA_TOKEN` (or `EARTHDATA_USERNAME` and `EARTHDATA_PASSWORD`), a netrc
+file, and finally an interactive username/password prompt.
+
+The default credential file is `~/.netrc` on macOS/Linux and
+`%USERPROFILE%\_netrc` on Windows (or the file named by `NETRC`). Its contents
+are:
 
 ```
 machine urs.earthdata.nasa.gov login YOUR_USERNAME password YOUR_PASSWORD
 ```
+
+Netrc credentials are stored as plain text. On a trusted machine, `earthaccess`
+can create the platform-appropriate file interactively:
+
+```bash
+python -c "import earthaccess; earthaccess.login(strategy='interactive', persist=True)"
+```
+
+The script caches only the OPERA `B01_WTR` layers it actually reads under
+`outputs/cache/opera_b01/`. Interrupted runs reuse complete cached downloads;
+the entire `outputs/` tree is ignored by Git.
+
+**Paper font.** The assembled residual figure uses Garamond and checks that the
+font is installed before downloading imagery. The font is not redistributed by
+this repository. Install a licensed Garamond font and restart Python before
+running with `RUN_ASSEMBLED_FIGURE=True`. The PNG preserves the rendered
+appearance; an editable SVG also requires Garamond on the machine opening it or
+the SVG viewer may substitute and reflow the text.
 
 **QGIS.** The tutorial and plug-in were developed using QGIS 3.44 LTR, available
 at https://www.qgis.org/download/. Older versions are in the "Archive" section of
@@ -154,7 +186,7 @@ of two committed tables:
 
 | Shipped default | Table | Producer |
 |-----------------|-------|----------|
-| NDWI, NDVI (all four values) | `data/final_threshold_summary.csv` | `final_threshold_optimization.py` |
+| NDWI, NDVI (all four values) | `data/threshold_cv_summary.csv` | legacy `threshold_optimization_cv.py` calibration |
 | NDMI (both values) | `data/ndmi_threshold_cv_all.csv` | `threshold_optimization_ndmi.py` |
 
 ### Which script owns which index
@@ -272,19 +304,29 @@ Behaviour is controlled by flags at the top of the file:
 |------|---------|--------|
 | `RUN_OPTIMIZATION` | `False` | `True` re-samples and re-fits. `False` runs a figures-only pass that reads thresholds from `THRESHOLD_SOURCE_CSV`. |
 | `RUN_RESIDUAL_MAPS` | `True` | Residual maps and confusion matrices against OPERA and Dynamic World. |
+| `RUN_ASSEMBLED_FIGURE` | `True` | Adds a paper-ready two-site plate containing the true-color views, both residual maps, and both confusion matrices. Requires `RUN_RESIDUAL_MAPS=True`. |
 | `RUN_TIMESERIES` | `False` | Roughly 500 monthly composites, so it is slow. |
 | `RUN_EPOCH_CUTS` | `True` | Re-fits per 5-year epoch and within the OLI era, to test threshold drift. |
+
+Figures-only runs intentionally default to the committed published calibration
+in `data/threshold_cv_summary.csv`, which supplies the plug-in and paper values.
+To redraw with a newer fit produced by this script, set `THRESHOLD_SOURCE_CSV`
+to `final_threshold_summary.csv`; the different calibration will change the
+residual maps and confusion matrices.
 
 Outputs land under `outputs/`:
 
 ```
 outputs/
 ├── tables/     final_threshold_summary.csv, threshold_epochs.csv, roc_points.csv
-└── figures/    roc/  residual_maps/  confusion_matrices/  threshold_drift/  timeseries/
+└── figures/    roc/  residual_maps/  confusion_matrices/  assembled/  threshold_drift/  timeseries/
 ```
 
 Every figure is written as both PNG and SVG, and each folder carries a `no_text/`
 twin with all labels stripped, for annotation in Illustrator or Canva.
+The assembled plate is rendered on a fixed 7.5 x 4.1 inch canvas at 300 dpi, so
+its labeled and text-free PNGs align exactly when overlaid. It also emits 115%,
+125%, and 135% Garamond text-size alternatives on the same fixed layout.
 
 > A figures-only pass (`RUN_OPTIMIZATION = False`) cannot redraw the ROC curves
 > unless `outputs/tables/roc_points.csv` exists. The per-point test scores live

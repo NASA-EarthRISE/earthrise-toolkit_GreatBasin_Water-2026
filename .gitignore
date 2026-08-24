@@ -7,6 +7,13 @@ data/*
 !data/threshold_cv_summary.csv
 !data/ndmi_threshold_cv_all.csv
 
+# ── Local credentials / environment ────────────────────────────────────────
+.env
+.env.*
+!.env.example
+.netrc
+_netrc
+
 # ── Generated outputs ──────────────────────────────────────────────────────
 outputs/
 water_extent_monthly_*.csv

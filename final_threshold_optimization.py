@@ -54,6 +54,36 @@ import datetime
 import concurrent.futures as cf
 from collections import defaultdict
 from pathlib import Path
+from urllib.parse import urlsplit
+
+# A TauDEM runtime can add its own older GDAL/PROJ data, driver, and DLL
+# directories to the machine environment. Those paths are incompatible with
+# newer Rasterio wheels, but valid conda/system GIS paths must be preserved.
+# Filter only TauDEM entries, before importing any binary GIS package; failed
+# imports cannot be safely repaired afterward.
+def _remove_taudem_geo_paths():
+    names = ('PROJ_DATA', 'PROJ_LIB', 'GDAL_DATA',
+             'GDAL_DRIVER_PATH', 'OGR_DRIVER_PATH', 'PATH')
+    for name in names:
+        raw = os.environ.get(name)
+        if not raw:
+            continue
+        entries = [entry for entry in raw.split(os.pathsep) if entry]
+        kept = [
+            entry for entry in entries
+            if not any(part.casefold().startswith('taudem')
+                       for part in Path(entry.strip().strip('"')).parts)
+        ]
+        if len(kept) == len(entries):
+            continue
+        if kept:
+            os.environ[name] = os.pathsep.join(kept)
+        else:
+            os.environ.pop(name, None)
+
+
+_remove_taudem_geo_paths()
+del _remove_taudem_geo_paths
 
 import ee
 import earthaccess
@@ -64,12 +94,13 @@ import rasterio
 from rasterio.io import MemoryFile
 from rasterio.mask import mask as rio_mask
 from rasterio.transform import rowcol
-from rasterio.warp import reproject, Resampling
+from rasterio.warp import reproject, Resampling, transform_bounds
 from pyproj import Transformer
 from shapely.geometry import box, mapping
 import matplotlib.pyplot as plt
+from matplotlib import font_manager
 from matplotlib.colors import ListedColormap, BoundaryNorm
-from matplotlib.patches import Patch
+from matplotlib.patches import Patch, FancyArrowPatch
 from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score
 from sklearn.model_selection import GroupKFold
 
@@ -116,8 +147,23 @@ SENSOR_WINDOWS = {
 #     export EE_PROJECT=your-ee-project-id
 EE_PROJECT = os.environ.get('EE_PROJECT', 'your-ee-project-id')
 
-ee.Authenticate()
-ee.Initialize(project=EE_PROJECT)
+def _initialize_earth_engine():
+    """Initialize from existing credentials without launching a browser."""
+    try:
+        ee.Initialize(project=EE_PROJECT)
+    except ee.EEException as exc:
+        if 'Please authorize access' not in str(exc):
+            raise
+        raise RuntimeError(
+            "Earth Engine credentials are unavailable. Authenticate outside "
+            "this script (for example, run 'earthengine authenticate' in a "
+            "terminal), then rerun. Automatic browser authentication is "
+            "intentionally disabled."
+        ) from exc
+
+
+_initialize_earth_engine()
+del _initialize_earth_engine
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -133,19 +179,23 @@ plt.rcParams['font.sans-serif'] = ['Arial', 'Helvetica', 'DejaVu Sans']
 # ── output layout ───────────────────────────────────────────────────────────
 # outputs/
 #   tables/                          final_threshold_summary.csv, landcover_monthly_*.csv
+#   cache/opera_b01/                 downloaded OPERA water layers (restart-safe)
 #   figures/roc/                     roc_curves.png
 #   figures/residual_maps/           residual_opera_<lake>.png
 #   figures/confusion_matrices/      confusion_matrix_<index>_opera_<lake>.png
+#   figures/assembled/               residual_confusion_assembled.png
 #   figures/timeseries/              landcover_stacked_*.png, stage_area_*.png
 # Each figure folder keeps its text-free twins in a no_text/ subfolder under the
 # SAME basename, so a pair is obvious and the whole text-free set can be grabbed
 # at once (e.g. for annotating in Canva).
 OUT_DIR    = SCRIPT_DIR / 'outputs'
 TABLES_DIR = OUT_DIR / 'tables'
+OPERA_CACHE_DIR = OUT_DIR / 'cache' / 'opera_b01'
 FIG_DIRS = {
     'roc':                OUT_DIR / 'figures' / 'roc',
     'residual_maps':      OUT_DIR / 'figures' / 'residual_maps',
     'confusion_matrices': OUT_DIR / 'figures' / 'confusion_matrices',
+    'assembled':          OUT_DIR / 'figures' / 'assembled',
     'threshold_drift':    OUT_DIR / 'figures' / 'threshold_drift',
     'timeseries':         OUT_DIR / 'figures' / 'timeseries',
 }
@@ -174,22 +224,21 @@ def _rel(p):
 
 RUN_OPTIMIZATION  = False   # figures-only pass; thresholds come from THRESHOLD_SOURCE_CSV
 RUN_RESIDUAL_MAPS = True
+RUN_ASSEMBLED_FIGURE = True  # paper-ready 2-site residual + confusion plate
 RUN_TIMESERIES    = False   # ~511 months; enable once the table looks right
 
-# Which table the figures-only pass (RUN_OPTIMIZATION=False) reads its thresholds
-# from. A bare filename resolves inside outputs/tables/; an absolute path is used
-# as given.
-#
-# This defaults to this script's own output so that both modes agree. A full run
-# draws its residual maps from the thresholds it just fitted, and a figures-only
-# pass redraws them from the table those same thresholds were written to, so the
-# two produce the same figures.
-#
-# Point it at SCRIPT_DIR / 'data' / 'threshold_cv_summary.csv' to redraw against
-# the published calibration instead, which is a different fit and will move the
-# residual maps. Any CSV with site / index / reference / threshold_mean columns
-# works.
-THRESHOLD_SOURCE_CSV = 'final_threshold_summary.csv'
+ASSEMBLED_FIGSIZE = (7.5, 4.1)  # full-width paper figure, matching the reference aspect
+ASSEMBLED_DPI     = 300
+ASSEMBLED_FONT_FAMILY = 'Garamond'
+ASSEMBLED_TEXT_SCALES = (1.15, 1.25, 1.35)  # fixed-layout comparison versions
+
+# Figures-only runs intentionally default to the committed published calibration
+# used by the plug-in defaults and paper figures. This legacy fit differs from a
+# fresh RUN_OPTIMIZATION=True result. To redraw from this script's latest fitted
+# table, set this to 'final_threshold_summary.csv'; a bare filename resolves under
+# outputs/tables/, while an absolute path is used as given. Any CSV with
+# site / index / reference / threshold_mean columns works.
+THRESHOLD_SOURCE_CSV = SCRIPT_DIR / 'data' / 'threshold_cv_summary.csv'
 
 # Epoch cuts — how the optimal threshold has drifted, so a recommendation can be
 # based on recent data rather than a 40-year average.
@@ -322,13 +371,39 @@ _EARTHACCESS_READY = False
 def _ensure_earthaccess():
     global _EARTHACCESS_READY
     if not _EARTHACCESS_READY:
-        earthaccess.login(strategy="netrc")
+        # "all" tries EARTHDATA_* environment credentials, netrc, then an
+        # interactive prompt.  Requiring netrc alone makes a first run fail on
+        # machines where credentials have not already been persisted.
+        guidance = (
+            "NASA Earthdata authentication failed. Set EARTHDATA_TOKEN, set "
+            "EARTHDATA_USERNAME and EARTHDATA_PASSWORD, configure a netrc "
+            "file, or enter credentials at the interactive prompt."
+        )
+        try:
+            auth = earthaccess.login(strategy="all")
+        except Exception as exc:
+            raise RuntimeError(guidance) from exc
+        if not auth.authenticated:
+            raise RuntimeError(guidance)
         _EARTHACCESS_READY = True
 
 
 # ═══════════════════════ figure helper ═══════════════════════
 
-def _save_textless_copy(fig, out_path):
+def _require_assembled_font():
+    """Fail clearly instead of silently substituting another paper font."""
+    properties = font_manager.FontProperties(family=[ASSEMBLED_FONT_FAMILY])
+    try:
+        return font_manager.findfont(properties, fallback_to_default=False)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"The assembled figure requires {ASSEMBLED_FONT_FAMILY}, but "
+            "Matplotlib cannot find it. Install a licensed copy of the font, "
+            "restart Python, and rerun; no substitute font will be used."
+        ) from exc
+
+
+def _save_textless_copy(fig, out_path, dpi=150, bbox_inches='tight'):
     """Save a second copy of `fig` with every character removed — titles, axis
     labels, tick labels, and legends stripped; plot geometry/imagery kept.
     Mutates the figure, so call it AFTER the as-is copy has been saved."""
@@ -350,18 +425,20 @@ def _save_textless_copy(fig, out_path):
     dest_dir = out_path.parent / 'no_text'
     dest_dir.mkdir(parents=True, exist_ok=True)
     for ext in FIGURE_FORMATS:
-        fig.savefig(dest_dir / f'{out_path.stem}.{ext}', dpi=150, bbox_inches='tight')
+        fig.savefig(dest_dir / f'{out_path.stem}.{ext}', dpi=dpi,
+                    bbox_inches=bbox_inches)
     print(f"  saved {_rel(dest_dir / out_path.stem)}.{{{','.join(FIGURE_FORMATS)}}}")
 
 
-def _save_fig(fig, out_path):
+def _save_fig(fig, out_path, dpi=150, bbox_inches='tight'):
     """Save the as-is figure in every FIGURE_FORMATS, then its text-free twin."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     for ext in FIGURE_FORMATS:
-        fig.savefig(out_path.with_suffix(f'.{ext}'), dpi=150, bbox_inches='tight')
+        fig.savefig(out_path.with_suffix(f'.{ext}'), dpi=dpi,
+                    bbox_inches=bbox_inches)
     print(f"Saved {_rel(out_path.with_suffix(''))}.{{{','.join(FIGURE_FORMATS)}}}")
-    _save_textless_copy(fig, out_path)
+    _save_textless_copy(fig, out_path, dpi=dpi, bbox_inches=bbox_inches)
     plt.close(fig)
 
 
@@ -519,7 +596,9 @@ def collect_ndvi_dw(ls_col, aoi):
 
 
 # ---- OPERA DSWx-HLS (NASA Earthdata, not GEE) ----
-# B01 = WTR: 0 not water, 1 open water, 2 partial, 3 snow/ice
+# B01 = WTR: 0 not water, 1 open water, 2 partial surface water,
+# 252 snow/ice, 253 cloud/cloud shadow, 254 ocean masked, 255 no data.
+# Only classes 0 and 1 are evaluated below; all other classes are excluded.
 
 def _opera_search(bounds, start=OPERA_START, end=OPERA_END):
     _ensure_earthaccess()
@@ -550,27 +629,52 @@ def _closest_opera(ls_ts_ms, opera_idx, window_days=OPERA_WINDOW_DAYS):
 
 
 def _read_opera_b01(granule, aoi_bounds):
-    """Stream B01_WTR clipped to the AOI -> (array, transform, crs), or None if
-    snow present / band missing / the remote read fails."""
+    """Download/cache B01_WTR and clip it to the AOI.
+
+    Passing earthaccess's file-like object to rasterio makes rasterio read the
+    entire remote TIFF into memory. An explicit local cache avoids that slow
+    path and lets an interrupted figure run resume without downloading again.
+    """
+    b01_name = 'unknown B01_WTR file'
     try:
-        if not [l for l in granule.data_links() if 'B01_WTR' in l]:
+        b01_url = next((link for link in granule.data_links()
+                        if urlsplit(link).path.lower().endswith('_b01_wtr.tif')),
+                       None)
+        if b01_url is None:
             return None
-        files = earthaccess.open([granule])
-        b01 = next((f for f in files if 'B01_WTR' in getattr(f, 'path', str(f))), None)
-        if b01 is None:
-            return None
-        with rasterio.open(b01) as src:
-            t = Transformer.from_crs('EPSG:4326', src.crs, always_xy=True)
-            minx, miny = t.transform(aoi_bounds[0], aoi_bounds[1])
-            maxx, maxy = t.transform(aoi_bounds[2], aoi_bounds[3])
+        b01_name = Path(urlsplit(b01_url).path).name
+        provider = granule.get('meta', {}).get('provider-id')
+        OPERA_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        b01_path = OPERA_CACHE_DIR / b01_name
+        if not b01_path.exists():
+            # CMR search is public; authenticate only when a protected asset
+            # really needs downloading. Cached OPERA reads skip this login.
+            _ensure_earthaccess()
+            print(f"      downloading {b01_name}...")
+            downloaded = earthaccess.download(
+                b01_url, local_path=OPERA_CACHE_DIR, provider=provider,
+                threads=1, show_progress=False)
+            if not downloaded:
+                return None
+            b01_path = Path(downloaded[0])
+        with rasterio.open(b01_path) as src:
+            if src.crs is None:
+                raise rasterio.errors.CRSError(f'{b01_name} has no CRS metadata')
+            # Transform the full rectangle boundary. Transforming only its SW
+            # and NE corners can clip the opposite edges after rotation into a
+            # projected OPERA tile CRS.
+            minx, miny, maxx, maxy = transform_bounds(
+                'EPSG:4326', src.crs, *aoi_bounds, densify_pts=21)
             data, transform = rio_mask(src, [mapping(box(minx, miny, maxx, maxy))],
                                        crop=True)
             data = data[0]
-            if np.any(data == 3):                    # snow/ice → skip scene
-                return None
             return data, transform, src.crs
+    except rasterio.errors.CRSError as exc:
+        # A CRS error is normally a process-wide GDAL/PROJ configuration issue;
+        # retrying every tile only wastes downloads and hides the real cause.
+        raise RuntimeError(f'CRS failure reading {b01_name}: {exc}') from exc
     except Exception as e:
-        print(f"      [OPERA granule skipped: {type(e).__name__}]")
+        print(f"      [OPERA {b01_name} skipped: {type(e).__name__}]")
         return None
 
 
@@ -1276,12 +1380,16 @@ def _download_truecolor(ls_img, aoi, scale=OPERA_SCALE_M):
 
 def _ndvi_residual_image(ls_img, dw_img, ndvi_thresh):
     """0 TN, 1 TP, 2 FP, 3 FN vs Dynamic World vegetation."""
-    pred_veg = _ndvi(ls_img).gt(ndvi_thresh)
+    ndvi = _ndvi(ls_img)
+    pred_veg = ndvi.gte(ndvi_thresh)
     dw_label = dw_img.select('label')
     actual = dw_label.remap(_DW_VEG + _DW_NONVEG,
                             [1] * len(_DW_VEG) + [0] * len(_DW_NONVEG),
                             defaultValue=-1)
-    valid = actual.gte(0).And(dw_label.neq(8))
+    # The constant image passed to where() is unmasked, so explicitly exclude
+    # Landsat cloud/gap/no-data pixels; otherwise a masked prediction falls
+    # through as code 0 and is incorrectly counted as a true negative.
+    valid = actual.gte(0).And(dw_label.neq(8)).And(ndvi.mask())
     return (ee.Image(0)
             .where(pred_veg.Not().And(actual.eq(0)), 0)
             .where(pred_veg.And(actual.eq(1)), 1)
@@ -1343,7 +1451,8 @@ def _plot_confusion(ax, resid_arr, ref_name, pos_label):
     """2x2 confusion matrix in the residual palette. Counts are panel pixels at the
     download scale, not the samples the threshold was fit on — read the shares."""
     c = _confusion_counts(resid_arr)
-    total = sum(c.values()) or 1
+    n_evaluated = sum(c.values())
+    total = max(n_evaluated, 1)
     iou = c['TP'] / max(c['TP'] + c['FP'] + c['FN'], 1)
     ax.imshow(_CM_CODES, cmap=_RESID_CMAP, norm=_RESID_NORM, interpolation='nearest')
     for (row, col), code in np.ndenumerate(_CM_CODES):
@@ -1356,10 +1465,130 @@ def _plot_confusion(ax, resid_arr, ref_name, pos_label):
     ax.set_yticklabels([pos_label, f'not {pos_label}'], fontsize=8, rotation=90, va='center')
     ax.set_xlabel('predicted (index)', fontsize=8)
     ax.set_ylabel(f'reference ({ref_name})', fontsize=8)
-    ax.set_title(f'IoU = {iou:.3f}  ({total:,} evaluated px)', fontsize=9)
+    ax.set_title(f'IoU = {iou:.3f}  ({n_evaluated:,} evaluated px)', fontsize=9)
     for spine in ax.spines.values():
         spine.set_visible(False)
     ax.tick_params(length=0)
+
+
+def _plot_confusion_compact(ax, resid_arr, pos_label, text_scale=1.0):
+    """Compact matrix cell for the assembled paper figure."""
+    c = _confusion_counts(resid_arr)
+    n_evaluated = sum(c.values())
+    denominator = max(n_evaluated, 1)
+    ax.imshow(_CM_CODES, cmap=_RESID_CMAP, norm=_RESID_NORM,
+              interpolation='nearest')
+    for (row, col), code in np.ndenumerate(_CM_CODES):
+        name = {0: 'TN', 1: 'TP', 2: 'FP', 3: 'FN'}[code]
+        ax.text(col, row, f'{name}\n{c[name]:,}\n{c[name] / denominator:.1%}',
+                ha='center', va='center', fontsize=5.8 * text_scale,
+                linespacing=1.05,
+                color='white' if code in _CM_LIGHT else '#222222')
+
+    positive = 'water' if pos_label == 'water' else 'veg.'
+    negative = 'not water' if pos_label == 'water' else 'not veg.'
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels([negative, positive], fontsize=5.7 * text_scale)
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels([positive, negative], fontsize=5.7 * text_scale,
+                       rotation=90, va='center')
+    ax.tick_params(length=0, pad=1)
+    ax.set_box_aspect(1)
+    ax.set_anchor('C')
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+
+@plt.rc_context({'font.family': ASSEMBLED_FONT_FAMILY})
+def plot_assembled_residual_figure(results, out_path, text_scale=1.0):
+    """Paper-ready two-site plate matching the reference 2 x 5 assembly."""
+    _require_assembled_font()
+    if len(results) != len(AOIS):
+        raise ValueError('The assembled figure requires one result for every AOI.')
+
+    fig = plt.figure(figsize=ASSEMBLED_FIGSIZE)
+    gs = fig.add_gridspec(
+        2, 6, left=0.072, right=0.985, bottom=0.13, top=0.89,
+        width_ratios=[1, 1, 1, 0.05, 0.72, 0.72],
+        height_ratios=[1, 1], wspace=0.18, hspace=0.055)
+
+    rows = []
+    for row, result in enumerate(results):
+        tc_ax = fig.add_subplot(gs[row, 0])
+        ndwi_ax = fig.add_subplot(gs[row, 1])
+        ndvi_ax = fig.add_subplot(gs[row, 2])
+        ndwi_cm_ax = fig.add_subplot(gs[row, 4])
+        ndvi_cm_ax = fig.add_subplot(gs[row, 5])
+        rows.append((tc_ax, ndwi_ax, ndvi_ax, ndwi_cm_ax, ndvi_cm_ax))
+
+        tc_ax.imshow(result['true_color'], extent=result['true_color_extent'],
+                     origin='upper', aspect='auto')
+        ndwi_ax.imshow(np.ma.masked_invalid(result['ndwi_residual']),
+                       cmap=_RESID_CMAP, norm=_RESID_NORM,
+                       extent=result['ndwi_extent'], origin='upper',
+                       aspect='auto', interpolation='nearest')
+        ndvi_ax.imshow(np.ma.masked_invalid(result['ndvi_residual']),
+                       cmap=_RESID_CMAP, norm=_RESID_NORM,
+                       extent=result['ndvi_extent'], origin='upper',
+                       aspect='auto', interpolation='nearest')
+
+        for ax in (tc_ax, ndwi_ax, ndvi_ax):
+            ax.set_xticks([]); ax.set_yticks([])
+            for spine in ax.spines.values():
+                spine.set_color('#666666')
+                spine.set_linewidth(0.55)
+
+        _plot_confusion_compact(ndwi_cm_ax, result['ndwi_residual'], 'water', text_scale)
+        _plot_confusion_compact(ndvi_cm_ax, result['ndvi_residual'],
+                                'vegetation', text_scale)
+
+    # Draw once so figure-coordinate labels can be centered on the final axes.
+    fig.canvas.draw()
+    column_titles = [
+        'True color (context)', 'NDWI residual vs OPERA', 'NDVI residual vs DW',
+        'NDWI confusion\nmatrix', 'NDVI confusion\nmatrix']
+    for ax, title in zip(rows[0], column_titles):
+        pos = ax.get_position()
+        fig.text((pos.x0 + pos.x1) / 2, 0.94, title,
+                 ha='center', va='center', fontsize=7.4 * text_scale,
+                 fontweight='bold')
+
+    map_left = rows[0][0].get_position().x0
+    for result, row_axes in zip(results, rows):
+        pos = row_axes[0].get_position()
+        fig.text(map_left - 0.038, (pos.y0 + pos.y1) / 2, result['site'],
+                 ha='center', va='center', rotation=90,
+                 fontsize=8.2 * text_scale, fontweight='bold')
+
+    matrix_positions = [ax.get_position() for row_axes in rows for ax in row_axes[3:]]
+    matrix_left = min(pos.x0 for pos in matrix_positions)
+    matrix_right = max(pos.x1 for pos in matrix_positions)
+    matrix_bottom = min(pos.y0 for pos in matrix_positions)
+    matrix_top = max(pos.y1 for pos in matrix_positions)
+    fig.text(matrix_left - 0.025, (matrix_bottom + matrix_top) / 2,
+             'Reference truth', ha='center', va='center', rotation=90,
+             fontsize=6.8 * text_scale)
+    fig.text((matrix_left + matrix_right) / 2, 0.068,
+             'Predicted (index threshold)', ha='center', va='center',
+             fontsize=6.8 * text_scale)
+
+    # Reference-style north arrow and spatial/matrix panel letters.
+    bottom_map = rows[-1][0].get_position()
+    arrow_x = map_left - 0.040
+    arrow_y0 = bottom_map.y0 + 0.010
+    arrow = FancyArrowPatch(
+        (arrow_x, arrow_y0), (arrow_x, arrow_y0 + 0.060),
+        transform=fig.transFigure, arrowstyle='-|>', mutation_scale=9,
+        linewidth=0.8, color='black')
+    fig.add_artist(arrow)
+    fig.text(arrow_x, arrow_y0 - 0.012, 'N', ha='center', va='top',
+             fontsize=7.0 * text_scale, fontweight='bold')
+    fig.text(map_left - 0.060, 0.025, 'a', fontsize=9 * text_scale,
+             fontweight='bold')
+    fig.text(matrix_left - 0.020, 0.025, 'b', fontsize=9 * text_scale,
+             fontweight='bold')
+
+    _save_fig(fig, out_path, dpi=ASSEMBLED_DPI, bbox_inches=None)
 
 
 def residual_maps_for_site(site, thresholds):
@@ -1374,7 +1603,7 @@ def residual_maps_for_site(site, thresholds):
     t_ndvi = thresholds.get(('NDVI', 'DW'))
     if t_ndwi is None or t_ndvi is None:
         print(f"  [{site}: missing OPERA NDWI or DW NDVI threshold — skipping maps]")
-        return
+        return None
 
     print(f"\n{site} (OPERA): selecting the median-stage scene of {OPERA_RESIDUAL_YEAR}...")
     start, end, date_str, frac = select_median_stage_month(
@@ -1389,58 +1618,67 @@ def residual_maps_for_site(site, thresholds):
     arr, grid_src = _download_grid(grid_img, aoi, ['NDWI', 'valid'])
     ndwi_arr, ls_valid = arr[0], arr[1] > 0.5
 
-    print(f"    Searching OPERA granules for {date_str}...")
-    month_start = pd.Timestamp(f'{date_str}-01')
-    month_end = month_start + pd.offsets.MonthEnd(1)
-    _ensure_earthaccess()
     try:
-        results = earthaccess.search_data(
-            short_name="OPERA_L3_DSWx-HLS_V1", bounding_box=bounds,
-            temporal=(month_start.strftime('%Y-%m-%d'), month_end.strftime('%Y-%m-%d')),
-            count=2000)
-    except IndexError:                      # earthaccess raises this on empty results
-        results = []
-    if not results:
-        print(f"  [{site}: no OPERA granules for {date_str} — skipping]")
-        return
+        print(f"    Searching OPERA granules for {date_str}...")
+        month_start = pd.Timestamp(f'{date_str}-01')
+        month_end = month_start + pd.offsets.MonthEnd(1)
+        try:
+            results = earthaccess.search_data(
+                short_name="OPERA_L3_DSWx-HLS_V1", bounding_box=bounds,
+                temporal=(month_start.strftime('%Y-%m-%d'),
+                          month_end.strftime('%Y-%m-%d')),
+                count=2000)
+        except IndexError:                  # earthaccess raises this on empty results
+            results = []
+        if not results:
+            print(f"  [{site}: no OPERA granules for {date_str} — skipping]")
+            return None
 
-    opera_idx = _opera_date_index(results)
-    print(f"      {len(results)} granule(s) across {len(opera_idx)} overpass day(s)")
-    opera_water, opera_valid = _opera_reference_on_grid(
-        opera_idx, grid_src, bounds, pd.Timestamp(f'{date_str}-15', tz='UTC'))
-    if not opera_valid.any():
-        print(f"  [{site}: no usable OPERA pixels for {date_str} — skipping]")
-        return
+        opera_idx = _opera_date_index(results)
+        print(f"      {len(results)} granule(s) across {len(opera_idx)} overpass day(s)")
+        opera_water, opera_valid = _opera_reference_on_grid(
+            opera_idx, grid_src, bounds, pd.Timestamp(f'{date_str}-15', tz='UTC'))
+        if not opera_valid.any():
+            print(f"  [{site}: no usable OPERA pixels for {date_str} — skipping]")
+            return None
+        opera_coverage = float(opera_valid.mean())
+        if opera_coverage < OPERA_MIN_COVERAGE:
+            print(f"    [warning: final OPERA coverage is {opera_coverage:.1%}, below the "
+                  f"{OPERA_MIN_COVERAGE:.0%} target; uncovered pixels are excluded]")
 
-    resid_ndwi = _residual_codes_np(ls_valid & opera_valid,
-                                    ndwi_arr > t_ndwi, opera_water)
+        resid_ndwi = _residual_codes_np(ls_valid & opera_valid,
+                                        ndwi_arr >= t_ndwi, opera_water)
 
-    print("    Downloading NDVI residual (vs Dynamic World)...")
-    dw_img = dw_col.filterDate(start, end).select('label').mode()
-    ndvi_arr, ndvi_bnds = _download_residual(
-        _ndvi_residual_image(ls_img, dw_img, t_ndvi), aoi)
+        print("    Downloading NDVI residual (vs Dynamic World)...")
+        dw_img = dw_col.filterDate(start, end).select('label').mode()
+        ndvi_arr, ndvi_bnds = _download_residual(
+            _ndvi_residual_image(ls_img, dw_img, t_ndvi), aoi)
 
-    b = grid_src.bounds
-    ext = [b.left, b.right, b.bottom, b.top]
+        b = grid_src.bounds
+        ndwi_extent = [b.left, b.right, b.bottom, b.top]
+        true_color_extent = [tc_bnds.left, tc_bnds.right,
+                             tc_bnds.bottom, tc_bnds.top]
+        ndvi_extent = [ndvi_bnds.left, ndvi_bnds.right,
+                       ndvi_bnds.bottom, ndvi_bnds.top]
+    finally:
+        grid_src.close()
 
     fig, axes = plt.subplots(1, 3, figsize=(14, 5))
     fig.suptitle(f'{site} — Spatial Residual Maps, {date_str} ({frac:.1%} water)\n'
-                 f'NDWI > {t_ndwi:+.3f} (OPERA validation) | '
-                 f'NDVI > {t_ndvi:+.3f} (Dynamic World validation)', fontsize=12)
+                 f'NDWI >= {t_ndwi:+.3f} (OPERA validation) | '
+                 f'NDVI >= {t_ndvi:+.3f} (Dynamic World validation)', fontsize=12)
 
-    axes[0].imshow(tc_arr, extent=[tc_bnds.left, tc_bnds.right,
-                                   tc_bnds.bottom, tc_bnds.top],
+    axes[0].imshow(tc_arr, extent=true_color_extent,
                    origin='upper', aspect='auto')
     axes[0].set_title('True color (context)', fontsize=10)
 
     # nearest-neighbor: categorical classes must not be blended when downsampled
     axes[1].imshow(np.ma.masked_invalid(resid_ndwi), cmap=_RESID_CMAP, norm=_RESID_NORM,
-                   extent=ext, origin='upper', aspect='auto', interpolation='nearest')
+                   extent=ndwi_extent, origin='upper', aspect='auto', interpolation='nearest')
     axes[1].set_title(f'NDWI residual vs OPERA\n(threshold {t_ndwi:+.3f})', fontsize=10)
 
     axes[2].imshow(np.ma.masked_invalid(ndvi_arr), cmap=_RESID_CMAP, norm=_RESID_NORM,
-                   extent=[ndvi_bnds.left, ndvi_bnds.right,
-                           ndvi_bnds.bottom, ndvi_bnds.top],
+                   extent=ndvi_extent,
                    origin='upper', aspect='auto', interpolation='nearest')
     axes[2].set_title(f'NDVI residual vs Dynamic World\n(threshold {t_ndvi:+.3f})',
                       fontsize=10)
@@ -1466,6 +1704,19 @@ def residual_maps_for_site(site, thresholds):
         cm_fig.tight_layout()
         _save_fig(cm_fig, fig_path('confusion_matrices',
                                    f'confusion_matrix_{tag}_opera_{slug}.png'))
+    return {
+        'site': site,
+        'date_str': date_str,
+        'water_fraction': frac,
+        't_ndwi': t_ndwi,
+        't_ndvi': t_ndvi,
+        'true_color': tc_arr,
+        'true_color_extent': true_color_extent,
+        'ndwi_residual': resid_ndwi,
+        'ndwi_extent': ndwi_extent,
+        'ndvi_residual': ndvi_arr,
+        'ndvi_extent': ndvi_extent,
+    }
 
 
 # ═══════════════ GSL time series: three-class stacked area ═══════════════
@@ -1822,8 +2073,8 @@ if __name__ == '__main__':
                     for (s, i, r), g in pts.groupby(['site', 'index', 'reference'])]
             plot_roc(rocs, fig_path('roc', 'roc_curves.png'))
         else:
-            print(f"[{_rel(roc_csv)} not found — ROC can only be regenerated by a "
-                  f"run with RUN_OPTIMIZATION=True]")
+            print(f"[optional {_rel(roc_csv)} not found — skipping ROC redraw; "
+                  f"create it with RUN_OPTIMIZATION=True]")
 
         ep_csv = table_path('threshold_epochs.csv')
         if ep_csv.exists():
@@ -1833,14 +2084,44 @@ if __name__ == '__main__':
                                      fig_path('threshold_drift',
                                               f'threshold_drift_{cut}.png'))
         else:
-            print(f"[{_rel(ep_csv)} not found — no drift figures to redraw]")
+            print(f"[optional {_rel(ep_csv)} not found — skipping threshold-drift redraw]")
 
     if RUN_RESIDUAL_MAPS:
+        if RUN_ASSEMBLED_FIGURE:
+            # Check before the two-site network/download pass so another machine
+            # never spends minutes fetching data only to discover the font is absent.
+            _require_assembled_font()
+        residual_failures = []
+        residual_results = {}
         for site in AOIS:
             try:
-                residual_maps_for_site(site, thresholds_by_site.get(site, {}))
+                result = residual_maps_for_site(site, thresholds_by_site.get(site, {}))
+                if result is None:
+                    residual_failures.append(site)
+                else:
+                    residual_results[site] = result
             except Exception as e:
                 print(f"  [{site}: residual maps failed ({type(e).__name__}: {e})]")
+                residual_failures.append(site)
+        if residual_failures:
+            raise RuntimeError(
+                "Residual maps/confusion matrices were not generated for: "
+                + ", ".join(residual_failures)
+            )
+        if RUN_ASSEMBLED_FIGURE:
+            print("\nAssembling the two-site paper figure...")
+            assembled_stem = 'residual_confusion_assembled'
+            assembled_results = [residual_results[site] for site in AOIS]
+            plot_assembled_residual_figure(
+                assembled_results,
+                fig_path('assembled', f'{assembled_stem}.png'))
+            for text_scale in ASSEMBLED_TEXT_SCALES:
+                scale_pct = round(text_scale * 100)
+                print(f"  rendering {scale_pct}% text version...")
+                plot_assembled_residual_figure(
+                    assembled_results,
+                    fig_path('assembled', f'{assembled_stem}_{scale_pct}pct.png'),
+                    text_scale=text_scale)
 
     if RUN_TIMESERIES:
         run_timeseries('Great Salt Lake', thresholds_by_site.get('Great Salt Lake', {}))
