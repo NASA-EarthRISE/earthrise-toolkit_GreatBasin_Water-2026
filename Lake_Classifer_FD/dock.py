@@ -221,10 +221,28 @@ def _heading(text):
     return lbl
 
 
-def _caption(text):
-    """Small muted explanatory line under a heading or above a control."""
+def _caption(text, buddy=None):
+    """Small explanatory line under a heading or above a control.
+
+    Pass `buddy` to programmatically associate this label with its control
+    so screen readers announce the label text when the control gains focus
+    (WCAG 1.3.1 / Section 508 §502.3.1).
+
+    The color uses the Qt palette's PlaceholderText role so the text remains
+    readable regardless of whether QGIS is running a light or dark theme.
+    Hard-coding a light hex color (#9fb3c1) against an uncontrolled background
+    failed WCAG 1.4.3 (Contrast, Minimum) on light system themes.
+    """
     lbl = QLabel(text)
-    lbl.setStyleSheet("color:#9fb3c1; font-size:11px;")
+    lbl.setStyleSheet("font-size:11px;")
+    lbl.setForegroundRole(lbl.foregroundRole())
+    palette = lbl.palette()
+    from qgis.PyQt.QtGui import QPalette
+    palette.setColor(QPalette.ColorRole.WindowText,
+                     palette.color(QPalette.ColorRole.PlaceholderText))
+    lbl.setPalette(palette)
+    if buddy is not None:
+        lbl.setBuddy(buddy)
     return lbl
 
 
@@ -668,9 +686,7 @@ class ThresholdControl(QWidget):
         title_row.setContentsMargins(0, 0, 0, 0)
 
         cap = QLabel(title)
-        cap.setStyleSheet(
-            "color:#9fb3c1; font-size:11px;"
-        )
+        cap.setStyleSheet("font-size:11px;")
 
         reset_btn = QPushButton("reset")
         reset_btn.setFlat(True)
@@ -678,8 +694,11 @@ class ThresholdControl(QWidget):
             Qt.CursorShape.PointingHandCursor
         )
         reset_btn.setStyleSheet(
-            "color:#48c9d6; font-size:11px; border:none;"
+            "font-size:11px; border:none;"
         )
+        # Accessible name includes the threshold name so AT users can distinguish
+        # the three reset buttons (WCAG 4.1.2 / Section 508 §502.3.3).
+        reset_btn.setAccessibleName("Reset %s to default" % title)
         reset_btn.clicked.connect(self.reset)
 
         title_row.addWidget(cap)
@@ -692,6 +711,9 @@ class ThresholdControl(QWidget):
         self._slider = QSlider(
             Qt.Orientation.Horizontal
         )
+        # Accessible name lets AT announce which threshold this slider controls
+        # (WCAG 4.1.2 / Section 508 §502.3.3).
+        self._slider.setAccessibleName(title + " slider")
 
         self._slider.setMinimum(
             int(round(minimum / step))
@@ -706,6 +728,7 @@ class ThresholdControl(QWidget):
         self._spin.setSingleStep(step)
         self._spin.setDecimals(3)
         self._spin.setMaximumWidth(80)
+        self._spin.setAccessibleName(title + " value")
 
         ctrl_row.addWidget(self._slider, 1)
         ctrl_row.addWidget(self._spin)
@@ -724,13 +747,12 @@ class ThresholdControl(QWidget):
             self._on_spin
         )
 
-        self._slider.sliderReleased.connect(
-            self.committed
-        )
-
-        self._spin.editingFinished.connect(
-            self.committed
-        )
+        self._slider.sliderReleased.connect(self.committed)
+        self._spin.editingFinished.connect(self.committed)
+        # Update the slider's accessible description whenever the value is
+        # committed so AT users can hear the current threshold without having
+        # to focus the spin box (WCAG 4.1.2 / Section 508 §502.3.14).
+        self.committed.connect(self._update_accessible_description)
 
         self.setValue(default)
 
@@ -787,6 +809,15 @@ class ThresholdControl(QWidget):
         """
         self.setValue(self._default)
         self.committed.emit()
+
+    def _update_accessible_description(self):
+        """Reflect the current threshold value in the slider's accessible
+        description so screen readers can announce it without requiring the
+        user to also focus the spin box (WCAG 4.1.2 / Section 508 §502.3.14).
+        """
+        self._slider.setAccessibleDescription(
+            "Current value: %.3f" % self.value()
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -877,6 +908,7 @@ class LakeClassifierDock(QDockWidget):
         self.lake_combo.addItems(
             list(PRESETS.keys())
         )
+        self.lake_combo.setAccessibleName("Select preset lake")
         self.lake_combo.currentIndexChanged.connect(
             self._update_default_thresholds
         )
@@ -885,6 +917,7 @@ class LakeClassifierDock(QDockWidget):
         btn_preset = QPushButton(
             "Use selected lake"
         )
+        btn_preset.setAccessibleName("Use selected lake as area of interest")
         btn_preset.clicked.connect(
             self._use_preset
         )
@@ -893,6 +926,7 @@ class LakeClassifierDock(QDockWidget):
         btn_file = QPushButton(
             "Load AOI from file\u2026"
         )
+        btn_file.setAccessibleName("Load area of interest from vector file")
         btn_file.clicked.connect(
             self._load_file
         )
@@ -901,6 +935,7 @@ class LakeClassifierDock(QDockWidget):
         btn_draw = QPushButton(
             "Draw AOI box on map"
         )
+        btn_draw.setAccessibleName("Draw rectangular area of interest on map canvas")
         btn_draw.clicked.connect(
             self._start_drawing_aoi
         )
@@ -910,9 +945,7 @@ class LakeClassifierDock(QDockWidget):
             "No area of interest selected yet."
         )
         self.aoi_status.setWordWrap(True)
-        self.aoi_status.setStyleSheet(
-            "color:#8ea6b6;"
-        )
+        self.aoi_status.setAccessibleName("Area of interest status")
         v.addWidget(self.aoi_status)
 
         v.addWidget(_divider())
@@ -922,13 +955,14 @@ class LakeClassifierDock(QDockWidget):
             _heading("2 \u00b7 Outputs")
         )
 
-        v.addWidget(
-            _caption("Earth Engine project ID:")
-        )
-
         self.project_edit = QLineEdit()
         self.project_edit.setPlaceholderText(
             "e.g. my-ee-project"
+        )
+        self.project_edit.setAccessibleName("Google Earth Engine project ID")
+
+        v.addWidget(
+            _caption("Earth Engine project ID:", buddy=self.project_edit)
         )
 
         # Restored from QgsSettings so the ID survives QGIS restarts — it is the
@@ -944,14 +978,16 @@ class LakeClassifierDock(QDockWidget):
 
         v.addWidget(self.project_edit)
 
-        v.addWidget(
-            _caption(
-                "Year (summer composite, June\u2013September):"
-            )
-        )
-
         self.year_combo = QComboBox()
         self.year_combo.addItems(YEARS)
+        self.year_combo.setAccessibleName("Select year for summer composite")
+
+        v.addWidget(
+            _caption(
+                "Year (summer composite, June\u2013September):",
+                buddy=self.year_combo,
+            )
+        )
         v.addWidget(self.year_combo)
 
         v.addWidget(
@@ -989,6 +1025,7 @@ class LakeClassifierDock(QDockWidget):
         btn_fetch = QPushButton(
             "Fetch selected outputs"
         )
+        btn_fetch.setAccessibleName("Fetch selected Earth Engine outputs for the current AOI and year")
         btn_fetch.clicked.connect(
             self._fetch_selected
         )
@@ -999,9 +1036,7 @@ class LakeClassifierDock(QDockWidget):
             "check one or more outputs above, then fetch."
         )
         self.vis_status.setWordWrap(True)
-        self.vis_status.setStyleSheet(
-            "color:#8ea6b6;"
-        )
+        self.vis_status.setAccessibleName("Fetch status")
         v.addWidget(self.vis_status)
 
         self.index_status = QLabel(
@@ -1009,9 +1044,7 @@ class LakeClassifierDock(QDockWidget):
             "running the classification."
         )
         self.index_status.setWordWrap(True)
-        self.index_status.setStyleSheet(
-            "color:#8ea6b6;"
-        )
+        self.index_status.setAccessibleName("Index fetch status")
         v.addWidget(self.index_status)
 
         v.addWidget(_divider())
@@ -1077,6 +1110,9 @@ class LakeClassifierDock(QDockWidget):
         btn_classify = QPushButton(
             "Classify: water / wetland / land"
         )
+        btn_classify.setAccessibleName(
+            "Run threshold classification to map open water, wetland, and land"
+        )
         btn_classify.clicked.connect(
             self._classify
         )
@@ -1087,10 +1123,10 @@ class LakeClassifierDock(QDockWidget):
         )
         self.area_readout.setWordWrap(True)
         self.area_readout.setStyleSheet(
-            "color:#cdd9e1; "
             "font-size:11px; "
             "font-family:monospace;"
         )
+        self.area_readout.setAccessibleName("Classified area summary")
         v.addWidget(self.area_readout)
 
         # --- Stage 4 ---
@@ -1100,6 +1136,9 @@ class LakeClassifierDock(QDockWidget):
         v.addWidget(_caption("Download monthly NDWI / NDVI / NDMI time series for the selected AOI and year."))
 
         btn_timeseries = QPushButton("Download Monthly Time Series CSV")
+        btn_timeseries.setAccessibleName(
+            "Download monthly NDWI, NDVI, and NDMI time series as CSV for the selected AOI and year"
+        )
         v.addWidget(btn_timeseries)
 
         # Deliberately NOT connected here. Unlike every other button in this
@@ -1109,6 +1148,7 @@ class LakeClassifierDock(QDockWidget):
         # place to look, not this file.
         self.btn_timeseries = btn_timeseries
         self.csv_label = QLabel("CSV output: (none yet)")
+        self.csv_label.setAccessibleName("CSV download status")
         v.addWidget(self.csv_label)
         
         # -- Stage 5 --
@@ -1127,6 +1167,9 @@ class LakeClassifierDock(QDockWidget):
         btn_openet = QPushButton(
             "Fetch OpenET"
         )
+        btn_openet.setAccessibleName(
+            "Fetch OpenET evapotranspiration raster for the current AOI and year (CONUS only)"
+        )
         btn_openet.clicked.connect(
             self._fetch_openet
         )
@@ -1136,9 +1179,7 @@ class LakeClassifierDock(QDockWidget):
             "Fetch evapotranspiration (ET) for this AOI."
         )
         self.openet_status.setWordWrap(True)
-        self.openet_status.setStyleSheet(
-            "color:#8ea6b6;"
-        )
+        self.openet_status.setAccessibleName("OpenET fetch status")
         v.addWidget(self.openet_status)
 
         v.addStretch(1)
@@ -2090,3 +2131,23 @@ class LakeClassifierDock(QDockWidget):
 
         fig.tight_layout()
         plt.show()
+
+        # Text-alternative for the chart: print a tabular summary to the
+        # QGIS message log so users of assistive technology can access the
+        # data without reading the image (WCAG 1.1.1 / Section 508 §502).
+        try:
+            from qgis.core import QgsMessageLog, Qgis
+            header = "Month | NDWI   | NDVI   | NDMI"
+            rows = [header, "-" * len(header)]
+            for _, row in df.iterrows():
+                rows.append(
+                    "%5s  | %6.3f | %6.3f | %6.3f"
+                    % (row["month"], row["NDWI"], row["NDVI"], row["NDMI"])
+                )
+            QgsMessageLog.logMessage(
+                "Time series data (%s):\n%s" % (year, "\n".join(rows)),
+                "Saline Lake Classifier",
+                Qgis.MessageLevel.Info,
+            )
+        except Exception:
+            pass
