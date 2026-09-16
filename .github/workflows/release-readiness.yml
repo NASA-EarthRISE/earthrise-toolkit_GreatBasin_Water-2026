@@ -1,1 +1,80 @@
+name: Release Readiness
 
+on:
+  pull_request:
+    branches:
+      - main
+
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline:
+    name: Repository baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install quality tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r quality/requirements.txt
+
+      - name: Check repository structure and Python syntax
+        run: |
+          python -m pytest -q tests/test_repository_baseline.py
+
+      - name: Run high-confidence Python checks
+        run: |
+          python -m ruff check . --output-format=github
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Check active JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -d '' javascript_files < <(
+            find . \
+              -type f \
+              -name "*.js" \
+              -not -path "./.git/*" \
+              -not -path "./.quality-venv/*" \
+              -not -path "./data/*" \
+              -not -path "./past_project/*" \
+              -not -path "./node_modules/*" \
+              -print0
+          )
+
+          if [[ ${#javascript_files[@]} -eq 0 ]]; then
+            echo "No active JavaScript files found."
+            exit 0
+          fi
+
+          for file in "${javascript_files[@]}"; do
+            echo "Checking ${file}"
+            node --check "${file}"
+          done
